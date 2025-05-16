@@ -1,3 +1,8 @@
 import teleport
+from ket import *
 
-print(teleport.hello())
+p = Process()
+a = p.alloc()
+print(dir(a))
+print(type(a))
+

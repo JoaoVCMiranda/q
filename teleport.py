@@ -21,9 +21,6 @@ def message(qubit):
     ket.H(alice)
     ket.Z(alice)
 
-def hello():
-    return "World"
-
 
 if __name__ == '__main__':
     p = ket.Process()
