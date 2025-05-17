@@ -29,3 +29,10 @@ Instalação via pip
 pip install ket-lang
 ```
 
+
+# TODO
+
+## channels
+
+- Implement error for >2 nodes in connection
+- Implement channel error rotatins
