@@ -48,3 +48,14 @@ class QuantumChannel:
         if (node == self.nodes[1]):
             return self.output
         return None
+# Frederick Roassats
+#   Paolo Fitpaudi * 
+#       Rule set que descreva o protocolo
+#       Sistema de sinais de acontecimentos & em sinais
+#       Exportar o csv 
+#       "Consume"
+#       setAllocated(false ) -> Jogado fora 
+#   Rodar dentro do devcontainer
+#   localhost:6090
+#   E# de memórias na memória
+#   O tempo dos photons se dá entre o menor dos dois pontos na memórias
