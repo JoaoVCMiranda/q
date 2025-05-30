@@ -36,3 +36,5 @@ pip install ket-lang
 
 - Implement error for >2 nodes in connection
 - Implement channel error rotatins
+
+Get more info with googleai studio
