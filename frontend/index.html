@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket com Three.js</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Configuração da cena
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+// Adicionar luz para ver o tubo
+        const ambientLight = new THREE.AmbientLight(0x404040); // Luz suave em toda a cena
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.75); // Luz direcional
+        directionalLight.position.set(1, 1, 1).normalize();
+        scene.add(directionalLight);
+
+        // Posição da câmera
+        camera.position.z = 10;
+        camera.position.y = 0; // Centraliza a vista verticalmente
+
+// --- Variáveis para o Tubo ---
+        const pontoInicial = new THREE.Vector3(-4, 0, 0); // Ponto A
+        const pontoFinal = new THREE.Vector3(4, 0, 0);   // Ponto B
+        const raioTubo = 0.5; // Raio do tubo
+
+        let porcentagem = 0; // Parâmetro de 0 a 1
+
+        // Meshes para as duas partes do tubo
+        let tuboPreenchidoMesh;
+        let tuboNaoPreenchidoMesh;
+
+        // Materiais
+        const materialNaoPreenchido = new THREE.MeshPhongMaterial({ color: 0x888888, shininess: 30 }); // Cinza
+        const materialPreenchido = new THREE.MeshPhongMaterial({ color: 0x00ff00, shininess: 50 }); // Verde vibrante
+
+        // --- Funções de Desenho ---
+
+        function criarTubos(startPoint, endPoint, radius, percentage) {
+            // Remover tubos existentes para recriá-los
+            if (tuboPreenchidoMesh) {
+                scene.remove(tuboPreenchidoMesh);
+                tuboPreenchidoMesh.geometry.dispose();
+                tuboPreenchidoMesh.material.dispose();
+            }
+            if (tuboNaoPreenchidoMesh) {
+                scene.remove(tuboNaoPreenchidoMesh);
+                tuboNaoPreenchidoMesh.geometry.dispose();
+                tuboNaoPreenchidoMesh.material.dispose();
+            }
+
+            const totalLength = startPoint.distanceTo(endPoint);
+            const filledLength = totalLength * percentage;
+
+            // Calcular a direção do tubo
+            const direction = new THREE.Vector3().subVectors(endPoint, startPoint).normalize();
+
+            // --- Parte Preenchida (Verde) ---
+            if (percentage > 0) {
+                const filledEndPoint = new THREE.Vector3().copy(startPoint).add(direction.clone().multiplyScalar(filledLength));
+                const filledCurve = new THREE.LineCurve3(startPoint, filledEndPoint);
+                const filledGeometry = new THREE.TubeGeometry(filledCurve, 64, radius, 8, false);
+                tuboPreenchidoMesh = new THREE.Mesh(filledGeometry, materialPreenchido);
+                scene.add(tuboPreenchidoMesh);
+            }
+
+            // --- Parte Não Preenchida (Cinza) ---
+            if (percentage < 1) {
+                const unfilledStartPoint = new THREE.Vector3().copy(startPoint).add(direction.clone().multiplyScalar(filledLength));
+                const unfilledCurve = new THREE.LineCurve3(unfilledStartPoint, endPoint);
+                const unfilledGeometry = new THREE.TubeGeometry(unfilledCurve, 64, radius, 8, false);
+                tuboNaoPreenchidoMesh = new THREE.Mesh(unfilledGeometry, materialNaoPreenchido);
+                scene.add(tuboNaoPreenchidoMesh);
+            }
+        }
+
+        // --- Inicialização ---
+        criarTubos(pontoInicial, pontoFinal, raioTubo, porcentagem); // Desenha a barra inicial
+
+        // --- Loop de Animação ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Atualiza a porcentagem para animação
+            porcentagem += 0.05; // Velocidade da animação
+            if (porcentagem > 1) {
+                porcentagem = 0; // Reinicia quando atinge 100%
+            }
+
+            // Recria os tubos com a nova porcentagem
+            criarTubos(pontoInicial, pontoFinal, raioTubo, porcentagem);
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // Ajustar o tamanho do renderizador e da câmera quando a janela for redimensionada
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+
+        // Conexão WebSocket
+        const socket = new WebSocket('ws://localhost:6789');
+
+        socket.onopen = (event) => {
+            console.log("Connected to WebSocket server.");
+        };
+        socket.onerror = (error) => {
+            console.error("WebSocket error:", error);
+        };
+
+        socket.onclose = (event) => {
+            console.log("Disconnected from WebSocket server.", event);
+        };
+        socket.onmessage = function(event) {
+            console.log('Mensagem recebida do servidor:', event.data);
+            // Aqui você pode usar os dados recebidos para interagir com a cena
+            // Por exemplo, mudar a cor do cubo com base na mensagem recebida
+            cube.material.color.set(event.data === "verde" ? 0x00ff00 : 0xff0000);
+        };
+
+        //function sendMessage(message) {
+        //    socket.send(message);
+        //}
+
+        // Enviar uma mensagem de exemplo
+        //sendMessage("verde");
+    </script>
+</body>
+</html>
