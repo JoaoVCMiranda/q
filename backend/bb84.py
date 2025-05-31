@@ -4,6 +4,9 @@ from channels import *
 from ket import *
 
 def exec(n_qubits, distance, loss_rate):
+    # integer
+    # km
+    # db/km
     classicalChannel = ClassicalChannel()
     quantumChannel = QuantumChannel(distance=distance, loss_rate=loss_rate, error_rate=0.1)
 
@@ -32,4 +35,4 @@ def exec(n_qubits, distance, loss_rate):
     return (alice_seq, bob_seq)
 
 if __name__ == "__main__":
-    exec()
+    print(exec(8,1, 0.02))

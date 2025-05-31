@@ -86,15 +86,13 @@
 
         // --- Inicialização ---
         criarTubos(pontoInicial, pontoFinal, raioTubo, porcentagem); // Desenha a barra inicial
-
         // --- Loop de Animação ---
         function animate() {
             requestAnimationFrame(animate);
 
             // Atualiza a porcentagem para animação
-            porcentagem += 0.05; // Velocidade da animação
-            if (porcentagem > 1) {
-                porcentagem = 0; // Reinicia quando atinge 100%
+            if (porcentagem < 1) {
+                porcentagem += 0.05; // Velocidade da animação
             }
 
             // Recria os tubos com a nova porcentagem
@@ -130,7 +128,7 @@
             console.log('Mensagem recebida do servidor:', event.data);
             // Aqui você pode usar os dados recebidos para interagir com a cena
             // Por exemplo, mudar a cor do cubo com base na mensagem recebida
-            cube.material.color.set(event.data === "verde" ? 0x00ff00 : 0xff0000);
+            porcentagem = event.data === "ping" ? 0 : 1;
         };
 
         //function sendMessage(message) {

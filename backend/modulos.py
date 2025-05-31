@@ -11,7 +11,7 @@ class QNode:
 
     def send_q(self, qubit : Quant):
         self.quantum_port.send(qubit)
-    
+
     def read_q(self):
         if self.quantum_port.read(self) == None:
             return None
