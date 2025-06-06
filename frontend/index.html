@@ -1,296 +1,166 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSocket com Three.js</title>
+    <title>Three.js Movable Wave Group</title>
     <style>
-        body { margin: 0; }
+        body { margin: 0; background-color: #111; }
         canvas { display: block; }
     </style>
 </head>
 <body>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
-    <script>
-        // Configuração da cena
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
-        // Adicionar luz para ver o tubo
-        const ambientLight = new THREE.AmbientLight(0x404040); // Luz suave em toda a cena
-        scene.add(ambientLight);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.75); // Luz direcional
-        directionalLight.position.set(1, 1, 1).normalize();
-        scene.add(directionalLight);
-
-
-        // Add this after renderer and camera are created:
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-
-        // Posição da câmera
-        camera.position.z = 10;
-        camera.position.y = 0; // Centraliza a vista verticalmente
-
-        // --- Variáveis para o Tubo ---
-        const pontoInicial = new THREE.Vector3(-4, 0, 0); // Ponto A
-        const pontoFinal = new THREE.Vector3(4, 0, 0);   // Ponto B
-        const raioTubo = 0.5; // Raio do tubo
-
-        let porcentagem = 0; // Parâmetro de 0 a 1
-
-        // Meshes para as duas partes do tubo
-        let tuboPreenchidoMesh;
-        let tuboNaoPreenchidoMesh;
-
-        // Materiais
-        const materialNaoPreenchido = new THREE.MeshPhongMaterial({ color: 0x888888, shininess: 30 }); // Cinza
-        const materialPreenchido = new THREE.MeshPhongMaterial({ color: 0x00ff00, shininess: 50 }); // Verde vibrante
-        
-        // Clock for animation
-        const clock = new THREE.Clock();
-        
-        
-        // --- Funções de Desenho ---
-
-        function criarTubos(startPoint, endPoint, radius, percentage) {
-            // Remover tubos existentes para recriá-los
-            if (tuboPreenchidoMesh) {
-                scene.remove(tuboPreenchidoMesh);
-                tuboPreenchidoMesh.geometry.dispose();
-                tuboPreenchidoMesh.material.dispose();
-            }
-            if (tuboNaoPreenchidoMesh) {
-                scene.remove(tuboNaoPreenchidoMesh);
-                tuboNaoPreenchidoMesh.geometry.dispose();
-                tuboNaoPreenchidoMesh.material.dispose();
-            }
-
-            const totalLength = startPoint.distanceTo(endPoint);
-            const filledLength = totalLength * percentage;
-
-            // Calcular a direção do tubo
-            const direction = new THREE.Vector3().subVectors(endPoint, startPoint).normalize();
-
-            // --- Parte Preenchida (Verde) ---
-            if (percentage > 0) {
-                const filledEndPoint = new THREE.Vector3().copy(startPoint).add(direction.clone().multiplyScalar(filledLength));
-                const filledCurve = new THREE.LineCurve3(startPoint, filledEndPoint);
-                const filledGeometry = new THREE.TubeGeometry(filledCurve, 64, radius, 8, false);
-                tuboPreenchidoMesh = new THREE.Mesh(filledGeometry, materialPreenchido);
-                scene.add(tuboPreenchidoMesh);
-            }
-
-            // --- Parte Não Preenchida (Cinza) ---
-            if (percentage < 1) {
-                const unfilledStartPoint = new THREE.Vector3().copy(startPoint).add(direction.clone().multiplyScalar(filledLength));
-                const unfilledCurve = new THREE.LineCurve3(unfilledStartPoint, endPoint);
-                const unfilledGeometry = new THREE.TubeGeometry(unfilledCurve, 64, radius, 8, false);
-                tuboNaoPreenchidoMesh = new THREE.Mesh(unfilledGeometry, materialNaoPreenchido);
-                scene.add(tuboNaoPreenchidoMesh);
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/"
             }
         }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-         /**
-         * Generates a 3D line geometry from two perpendicular sine waves.
-         * @param {object} params - The parameters for the wave.
-         * @returns {THREE.BufferGeometry} The generated line geometry.
-         */
-         function createSineWaveGeometry(params) {
-            const {
-                points = 500,    // Number of vertices in the line
-                length = 20,     // How long the wave is on the X-axis
-                amplitudeY = 2,  // Amplitude of the wave on the Y-axis
-                frequencyY = 2,  // How many crests/troughs on the Y-axis
-                amplitudeZ = 2,  // Amplitude of the wave on the Z-axis
-                frequencyZ = 2,  // How many crests/troughs on the Z-axis
-                phaseZ = Math.PI / 2 // Phase shift for Z, PI/2 makes it a cosine wave
-            } = params;
+        // 1. SCENE SETUP (Unchanged)
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        // Pulled camera back to see the group move
+        camera.position.set(0, 10, 25); 
 
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        const clock = new THREE.Clock();
+
+        // 2. GEOMETRY GENERATOR FUNCTION (Unchanged)
+        function createSineWaveGeometry(params) {
+            // ... (no changes here, function is the same)
+            const { points = 500, length = 20, amplitudeY = 2, frequencyY = 2, amplitudeZ = 2, frequencyZ = 2, phaseZ = Math.PI / 2 } = params;
             const positions = [];
             const step = length / points;
-
             for (let i = 0; i < points; i++) {
-                // X progresses linearly
                 const x = i * step - length / 2;
-                // Y is a sine wave
                 const y = amplitudeY * Math.sin(x * frequencyY);
-                // Z is another sine wave, perpendicular, with a phase shift
                 const z = amplitudeZ * Math.sin(x * frequencyZ + phaseZ);
-
                 positions.push(x, y, z);
             }
-            
             const geometry = new THREE.BufferGeometry();
-            // We use Float32Array for performance
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            
-            // Store parameters for easy access during animation
             geometry.userData.params = params;
-            
             return geometry;
         }
 
-        
-
-
-
-        // --- Inicialização ---
-        criarTubos(pontoInicial, pontoFinal, raioTubo, porcentagem); // Desenha a barra inicial
-        
-        // 3. CREATING THE WAVE OBJECT
+        // 3. CREATING THE GROUPED OBJECTS
         // =============================================
         const waveParams = {
             points: 1000,
             length: 20,
-            amplitudeY: 2.5,
+            amplitudeY: 3,
             frequencyY: 0.5,
-            amplitudeZ: 2.5,
+            amplitudeZ: 3,
             frequencyZ: 0.5,
-            phaseZ: Math.PI / 2 // Makes Y and Z waves perfectly out of sync (circular)
+            phaseZ: Math.PI / 2
         };
-        
-        const waveGeometry = createSineWaveGeometry(waveParams);
-        
-        const waveMaterial = new THREE.LineBasicMaterial({ 
-            color: 0x00ffff, // A nice cyan color
-            linewidth: 2 // Note: this is not supported on all platforms
-        });
-        
-        const sineWave = new THREE.Line(waveGeometry, waveMaterial);
-        scene.add(sineWave);
 
-        // --- XY Plane Projection (Z = 0) ---
+        // --- NEW: CREATE A GROUP ---
+        const waveGroup = new THREE.Group();
+        scene.add(waveGroup); // Add the single group to the scene
+
+        // --- Main 3D Wave ---
+        const mainWaveGeometry = createSineWaveGeometry(waveParams);
+        const mainWaveMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 });
+        const sineWave = new THREE.Line(mainWaveGeometry, mainWaveMaterial);
+        waveGroup.add(sineWave); // Add to group, NOT scene
+
+        // --- Projections ---
         const projectionXYGeom = new THREE.BufferGeometry();
         projectionXYGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3));
-        const projectionXYMat = new THREE.LineBasicMaterial({ color: 0xffff00 }); // Yellow
+        const projectionXYMat = new THREE.LineBasicMaterial({ color: 0xffff00 });
         const projectionXY = new THREE.Line(projectionXYGeom, projectionXYMat);
-        scene.add(projectionXY);
+        waveGroup.add(projectionXY); // Add to group
 
-        // --- XZ Plane Projection (Y = 0) ---
         const projectionXZGeom = new THREE.BufferGeometry();
         projectionXZGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3));
-        const projectionXZMat = new THREE.LineBasicMaterial({ color: 0xff00ff }); // Magenta
+        const projectionXZMat = new THREE.LineBasicMaterial({ color: 0xff00ff });
         const projectionXZ = new THREE.Line(projectionXZGeom, projectionXZMat);
-        scene.add(projectionXZ);
+        waveGroup.add(projectionXZ); // Add to group
 
-        // 4. HELPER GRIDS FOR VISUAL CONTEXT
-        // =============================================
+        // --- Helper Grids ---
         const gridSize = waveParams.length;
         const gridDivisions = 10;
-        
-        // XZ Plane (the ground plane)
         const gridXZ = new THREE.GridHelper(gridSize, gridDivisions, 0x888888, 0x444444);
-        scene.add(gridXZ);
+        //waveGroup.add(gridXZ); // Add to group
         
-        // XY Plane (the wall plane)
         const gridXY = new THREE.GridHelper(gridSize, gridDivisions, 0x888888, 0x444444);
         gridXY.rotation.x = Math.PI / 2;
-        scene.add(gridXY);
+        //waveGroup.add(gridXY); // Add to group
 
-        // --- Loop de Animação ---
+        // --- Set Draw Range (on geometries, this is unchanged) ---
+        const gridDivisionsToShow = 4;
+        const unitsPerDivision = waveParams.length / 10;
+        const visibleLength = gridDivisionsToShow * unitsPerDivision;
+        const pointsPerUnit = waveParams.points / waveParams.length;
+        const visiblePointsCount = Math.floor(visibleLength * pointsPerUnit);
+        const startPointIndex = Math.floor((waveParams.points - visiblePointsCount) / 2);
+        
+        mainWaveGeometry.setDrawRange(startPointIndex, visiblePointsCount);
+        projectionXYGeom.setDrawRange(startPointIndex, visiblePointsCount);
+        projectionXZGeom.setDrawRange(startPointIndex, visiblePointsCount);
+
+        // 4. ANIMATION LOOP
+        // =============================================
         function animate() {
             requestAnimationFrame(animate);
-
-            // Atualiza a porcentagem para animação
-            if (porcentagem < 1) {
-                porcentagem += 0.05; // Velocidade da animação
-            }
-
-            // Recria os tubos com a nova porcentagem
-            criarTubos(pontoInicial, pontoFinal, raioTubo, porcentagem);
-
-            // Configurações para a animação da onda
             const elapsedTime = clock.getElapsedTime();
-
-            // Update the geometry to make it move
-            const positions = sineWave.geometry.attributes.position.array;
+            
+            // --- First, animate the individual waves (local animation) ---
+            const mainPositions = sineWave.geometry.attributes.position.array;
+            const xyPositions = projectionXY.geometry.attributes.position.array;
+            const xzPositions = projectionXZ.geometry.attributes.position.array;
             const params = sineWave.geometry.userData.params;
 
             for (let i = 0; i < params.points; i++) {
-                const i3 = i * 3; // Index for x, y, z components
-                
-                const x = positions[i3]; // X position doesn't change
-                
-                // Recalculate Y and Z, adding time to make the wave travel
+                const i3 = i * 3;
+                const x = (i * (params.length / params.points)) - params.length / 2;
                 const y = params.amplitudeY * Math.sin(x * params.frequencyY + elapsedTime);
                 const z = params.amplitudeZ * Math.sin(x * params.frequencyZ + params.phaseZ + elapsedTime);
 
-                positions[i3 + 1] = y; // Update Y
-                positions[i3 + 2] = z; // Update Z
+                mainPositions[i3] = x; mainPositions[i3 + 1] = y; mainPositions[i3 + 2] = z;
+                xyPositions[i3] = x; xyPositions[i3 + 1] = y; xyPositions[i3 + 2] = 0;
+                xzPositions[i3] = x; xzPositions[i3 + 1] = 0; xzPositions[i3 + 2] = z;
             }
-
-            for (let i = 0; i < params.points; i++) {
-                const i3 = i * 3; // Index for x, y, z components
-
-                const x = positions[i3]; // X position doesn't change
-
-                // Recalculate Y and Z, adding time to make the wave travel
-                const y = params.amplitudeY * Math.sin(x * params.frequencyY + elapsedTime);
-                const z = params.amplitudeZ * Math.sin(x * params.frequencyZ + params.phaseZ + elapsedTime);
-
-                positions[i3 + 1] = y; // Update Y
-                positions[i3 + 2] = z; // Update Z
-
-                // --- Projeção XY (Z = 0) ---
-                projectionXY.geometry.attributes.position.array[i3]     = x;
-                projectionXY.geometry.attributes.position.array[i3 + 1] = y;
-                projectionXY.geometry.attributes.position.array[i3 + 2] = 0;
-
-                // --- Projeção XZ (Y = 0) ---
-                projectionXZ.geometry.attributes.position.array[i3]     = x;
-                projectionXZ.geometry.attributes.position.array[i3 + 1] = 0;
-                projectionXZ.geometry.attributes.position.array[i3 + 2] = z;
-            }
-
-            // IMPORTANT: Tell Three.js that the position attribute has been updated
+            
             sineWave.geometry.attributes.position.needsUpdate = true;
             projectionXY.geometry.attributes.position.needsUpdate = true;
             projectionXZ.geometry.attributes.position.needsUpdate = true;
-            // IMPORTANT: Tell Three.js that the position attribute has been updated
-            //sineWave.geometry.attributes.position.needsUpdate = true;
-            controls.update(); // Add this line
 
+            // --- NEW: Animate the entire group (global animation) ---
+            // Move the group in a circle on the XZ plane
+            const radius = 5;
+            const speed = 0.5;
+            //waveGroup.position.x = Math.sin(elapsedTime * speed) * radius;
+            //waveGroup.position.z = Math.cos(elapsedTime * speed) * radius;
+
+            // Also slowly rotate the whole group
+            //waveGroup.rotation.y = elapsedTime * 0.2;
+
+
+            // --- Render ---
+            controls.update();
             renderer.render(scene, camera);
         }
 
-        animate();
-
-        // Ajustar o tamanho do renderizador e da câmera quando a janela for redimensionada
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-
-        // Conexão WebSocket
-        const socket = new WebSocket('ws://localhost:6789');
-
-        socket.onopen = (event) => {
-            console.log("Connected to WebSocket server.");
-        };
-        socket.onerror = (error) => {
-            console.error("WebSocket error:", error);
-        };
-
-        socket.onclose = (event) => {
-            console.log("Disconnected from WebSocket server.", event);
-        };
-        socket.onmessage = function(event) {
-            console.log('Mensagem recebida do servidor:', event.data);
-            // Aqui você pode usar os dados recebidos para interagir com a cena
-            // Por exemplo, mudar a cor do cubo com base na mensagem recebida
-            porcentagem = event.data === "ping" ? 0 : 1;
-        };
-
-        //function sendMessage(message) {
-        //    socket.send(message);
-        //}
-
+        animate();
     </script>
 </body>
 </html>
