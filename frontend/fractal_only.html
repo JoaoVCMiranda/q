@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimized Fractal Zoom</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            height: 100vh;
+        }
+        #canvas-container {
+            flex-grow: 1;
+        }
+        .control-button {
+            position: absolute;
+            left: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        .control-button:hover {
+            background-color: #0056b3;
+        }
+        #startFractalZoomButton {
+            top: 50%;
+        }
+    </style>
+</head>
+<body>
+    <button id="startFractalZoomButton" class="control-button">Start Fractal Zoom</button>
+    <div id="canvas-container"></div>
+
+    <script type="importmap">
+        { "imports": { 
+            "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
+            "@tweenjs/tween.js": "https://unpkg.com/@tweenjs/tween.js@21.0.0/dist/tween.esm.js"
+        } }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import TWEEN from '@tweenjs/tween.js';
+
+        // Scene setup
+        const canvasContainer = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        const camera = new THREE.OrthographicCamera(-window.innerWidth / 2, window.innerWidth / 2, window.innerHeight / 2, -window.innerHeight / 2, 1, 1000);
+        camera.position.z = 500;
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        canvasContainer.appendChild(renderer.domElement);
+
+        let fractalGroup = new THREE.Group();
+        scene.add(fractalGroup);
+
+        let gridSize = 200;
+        let divisions = 10;
+        let verticalLines = [];
+
+        // Recursive function to create fractal grids with vertical lines
+        function createFractalGrid(position, size, depth) {
+            if (depth === 0) return;
+
+            const gridHelper = new THREE.GridHelper(size, divisions, 0xffffff, 0xffffff);
+            gridHelper.position.set(position.x, position.y, position.z);
+            fractalGroup.add(gridHelper);
+
+            // Add vertical lines
+            const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
+            const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(position.x, position.y - size / 2, position.z),
+                new THREE.Vector3(position.x, position.y + size / 2, position.z)
+            ]);
+            const verticalLine = new THREE.Line(lineGeometry, lineMaterial);
+            fractalGroup.add(verticalLine);
+            verticalLines.push(verticalLine);
+
+            const newSize = size / 2;
+            const offsets = [-newSize, newSize];
+
+            for (let x of offsets) {
+                for (let y of offsets) {
+                    createFractalGrid({ x: position.x + x, y: position.y + y, z: position.z }, newSize, depth - 1);
+                }
+            }
+        }
+
+        // Function to animate zooming into the fractal
+        function startFractalZoomAnimation() {
+            let zoomFactor = { value: 1 };
+            let depthFactor = { value: 3 };
+
+            new TWEEN.Tween(zoomFactor)
+                .to({ value: 10 }, 5000) // Zoom in effect
+                .onUpdate(() => {
+                    fractalGroup.scale.set(zoomFactor.value, zoomFactor.value, zoomFactor.value);
+                    removeOutOfViewLines();
+                })
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .start();
+
+            new TWEEN.Tween(depthFactor)
+                .to({ value: 6 }, 5000) // Increase recursion depth dynamically
+                .onUpdate(() => {
+                    fractalGroup.clear();
+                    verticalLines = [];
+                    createFractalGrid({ x: 0, y: 0, z: 0 }, gridSize, Math.floor(depthFactor.value));
+                })
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .start();
+        }
+
+        // Function to remove vertical lines outside the view
+        function removeOutOfViewLines() {
+            const frustum = new THREE.Frustum();
+            const cameraMatrix = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+            frustum.setFromProjectionMatrix(cameraMatrix);
+
+            verticalLines = verticalLines.filter(line => {
+                if (!frustum.intersectsObject(line)) {
+                    fractalGroup.remove(line);
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        // Initialize fractal and animation loop
+        createFractalGrid({ x: 0, y: 0, z: 0 }, gridSize, 3);
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Event listener for animation start
+        document.getElementById('startFractalZoomButton').addEventListener('click', startFractalZoomAnimation);
+    </script>
+</body>
+</html>
