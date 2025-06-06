@@ -76,6 +76,7 @@
         <button id="translateButton" class="control-button primary">Translate</button>
         <button id="rotateButton" class="control-button secondary">Animate Phase</button>
         <button id="toggleHelixButton" class="control-button tertiary">Toggle 3D Helix</button>
+        <button id="toggle2DProjection" class="control-button quaternary">Toggle 2D Projection</button>
     </div>
 
     <div id="info-display">
@@ -96,6 +97,7 @@
         };
         let waveGroup, isTranslating, isRotating;
         let isHelixVisible = true;
+        let isProjectionVisible = true;
 
         // --- HUD GLOBALS ---
         let hudScene, hudCamera, hudSphereGroup, vectorLine, vectorPoint;
@@ -109,6 +111,7 @@
         const toggleHelixButton = document.getElementById('toggleHelixButton');
         const togglePhaseDisplayButton = document.getElementById('togglePhaseDisplayButton');
         const phaseValueElement = document.getElementById('phase-value');
+        const toggleProjectionsVisibilityButton = document.getElementById('toggle2DProjection');    
 
         // 1. SCENE SETUP
         const canvasContainer = document.getElementById('canvas-container');
@@ -196,8 +199,9 @@
         }
 
         function setButtonsDisabled(disabled) { translateButton.disabled = disabled; rotateButton.disabled = disabled; }
-        function triggerTranslateAnimation() { if (isTranslating || isRotating) return; isTranslating = true; setButtonsDisabled(true); const targetX = waveGroup.position.x === 10 ? -10 : 10; new TWEEN.Tween(waveGroup.position).to({ x: targetX }, 2500).easing(TWEEN.Easing.Cubic.InOut).onComplete(() => { isTranslating = false; setButtonsDisabled(false); }).start(); }
+        function triggerTranslateAnimation() { if (isTranslating || isRotating) return; isTranslating = true; setButtonsDisabled(true); const targetX = waveGroup.position.x === -10 ? 100 : -10; new TWEEN.Tween(waveGroup.position).to({ x: targetX }, 2500).easing(TWEEN.Easing.Cubic.InOut).onComplete(() => { isTranslating = false; setButtonsDisabled(false); }).start(); }
         function toggleHelixVisibility() { isHelixVisible = !isHelixVisible; if (waveGroup) { const helix = waveGroup.getObjectByName('mainWave'); if (helix) helix.visible = isHelixVisible; } }
+        function toggleProjectionsVisibility() { isPhaseDisplayVisible = !isPhaseDisplayVisible; if (waveGroup) { const projXY = waveGroup.getObjectByName('projectionXY');const projXZ = waveGroup.getObjectByName('projectionXZ'); if (projXY) projXY.visible = isPhaseDisplayVisible; if (projXZ) projXZ.visible = isPhaseDisplayVisible; } }
         function togglePhaseDisplay() { phaseValueElement.style.display = phaseValueElement.style.display === 'none' ? 'block' : 'none'; }
         
         function triggerRotationAnimation() {
@@ -225,7 +229,7 @@
             translateButton.addEventListener('click', triggerTranslateAnimation);
             rotateButton.addEventListener('click', triggerRotationAnimation);
             toggleHelixButton.addEventListener('click', toggleHelixVisibility);
-            togglePhaseDisplayButton.addEventListener('click', togglePhaseDisplay);
+            toggleProjectionsVisibilityButton.addEventListener('click', toggleProjectionsVisibility);
             animate();
         }
 
@@ -258,7 +262,7 @@
             controls.update();
 
             phaseValueElement.textContent = `phaseZ: ${waveParams.phaseZ.toFixed(3)}`;
-
+            //waveGroup.rotation.x += 0.01;
             const sineWave = waveGroup.getObjectByName('mainWave'); const projectionXY = waveGroup.getObjectByName('projectionXY'); const projectionXZ = waveGroup.getObjectByName('projectionXZ'); const params = sineWave.geometry.userData.params;
             for (let i = 0; i < params.points; i++) { const i3 = i * 3; const x = (i * (params.length / params.points)) - params.length / 2; const y = params.amplitudeY * Math.sin(x * params.frequencyY + elapsedTime); const z = params.amplitudeZ * Math.sin(x * params.frequencyZ + params.phaseZ + elapsedTime); const mainPositions = sineWave.geometry.attributes.position.array; mainPositions[i3] = x; mainPositions[i3 + 1] = y; mainPositions[i3 + 2] = z; const xyPositions = projectionXY.geometry.attributes.position.array; xyPositions[i3] = x; xyPositions[i3 + 1] = y; xyPositions[i3 + 2] = 0; const xzPositions = projectionXZ.geometry.attributes.position.array; xzPositions[i3] = x; xzPositions[i3 + 1] = 0; xzPositions[i3 + 2] = z; }
             sineWave.geometry.attributes.position.needsUpdate = true; projectionXY.geometry.attributes.position.needsUpdate = true; projectionXZ.geometry.attributes.position.needsUpdate = true;

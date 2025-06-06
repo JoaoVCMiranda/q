@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HudSphere & Fractal Grid Animation</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            height: 100vh;
+        }
+        #canvas-container {
+            flex-grow: 1;
+        }
+        .control-button {
+            position: absolute;
+            left: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        .control-button:hover {
+            background-color: #0056b3;
+        }
+        #startAnimationButton {
+            top: 40%;
+        }
+        #startFractalButton {
+            top: 50%;
+        }
+    </style>
+</head>
+<body>
+    <button id="startAnimationButton" class="control-button">Start HudSphere Animation</button>
+    <button id="startFractalButton" class="control-button">Fractal Grid Animation</button>
+    <div id="canvas-container"></div>
+
+    <script type="importmap">
+        { "imports": { 
+            "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
+            "@tweenjs/tween.js": "https://unpkg.com/@tweenjs/tween.js@21.0.0/dist/tween.esm.js"
+        } }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import TWEEN from '@tweenjs/tween.js';
+
+        // Scene setup
+        const canvasContainer = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        const camera = new THREE.OrthographicCamera(-window.innerWidth / 2, window.innerWidth / 2, window.innerHeight / 2, -window.innerHeight / 2, 1, 1000);
+        camera.position.z = 500;
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        canvasContainer.appendChild(renderer.domElement);
+
+        let hudSphereGroup;
+        let fractalGridGroup;
+
+        // Function to create the HudSphere
+        function createHudSphere() {
+            hudSphereGroup = new THREE.Group();
+            const hudSphereRadius = 150;
+
+            const sphereGeom = new THREE.SphereGeometry(hudSphereRadius, 32, 16);
+            const sphereMat = new THREE.MeshBasicMaterial({ color: 0x555555, wireframe: true, transparent: true, opacity: 0.5 });
+            const sphereMesh = new THREE.Mesh(sphereGeom, sphereMat);
+            hudSphereGroup.add(sphereMesh);
+
+            hudSphereGroup.scale.set(0.01, 0.01, 0.01); // Start small
+            scene.add(hudSphereGroup);
+        }
+
+        // Function to start the HudSphere animation
+        function startHudSphereAnimation() {
+            if (!hudSphereGroup) return;
+
+            new TWEEN.Tween(hudSphereGroup.scale)
+                .to({ x: 1, y: 1, z: 1 }, 2000)
+                .easing(TWEEN.Easing.Elastic.Out)
+                .start();
+        }
+
+        // Function to create the fractal grid (parallel to the camera)
+        function createFractalGrid() {
+            fractalGridGroup = new THREE.Group();
+            const gridSize = 200;
+            const divisions = 10;
+
+            const gridHelper = new THREE.GridHelper(gridSize, divisions, 0xffffff, 0xffffff);
+            gridHelper.rotation.x = Math.PI / 2; // Orient the grid parallel to the camera (XY plane)
+            fractalGridGroup.add(gridHelper);
+            scene.add(fractalGridGroup);
+        }
+
+        // Function to animate the fractal grid
+        function startFractalGridAnimation() {
+            if (!fractalGridGroup) return;
+
+            let scaleFactor = { value: 1 };
+
+            new TWEEN.Tween(scaleFactor)
+                .to({ value: 5 }, 3000) // Zoom in effect
+                .onUpdate(() => {
+                    fractalGridGroup.scale.set(scaleFactor.value, scaleFactor.value, scaleFactor.value);
+                })
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .start();
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+            renderer.render(scene, camera);
+        }
+
+        // Initialize scene and add event listeners
+        createHudSphere();
+        createFractalGrid();
+        animate();
+
+        document.getElementById('startAnimationButton').addEventListener('click', startHudSphereAnimation);
+        document.getElementById('startFractalButton').addEventListener('click', startFractalGridAnimation);
+    </script>
+</body>
+</html>
