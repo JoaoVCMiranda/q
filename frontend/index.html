@@ -49,6 +49,8 @@
             font-family: monospace;
             font-size: 16px;
             color: #00ff88;
+            /* MODIFICATION: Added transition for smooth font size and color changes */
+            transition: font-size 0.3s ease-in-out, color 0.3s ease-in-out;
         }
 
         .control-button {
@@ -122,7 +124,7 @@
         function toggleHelixVisibility() { isHelixVisible = !isHelixVisible; if (waveGroup) { const helix = waveGroup.getObjectByName('mainWave'); if (helix) helix.visible = isHelixVisible; } }
         function togglePhaseDisplay() { phaseValueElement.style.display = phaseValueElement.style.display === 'none' ? 'block' : 'none'; }
         
-        // --- REFACTORED ROTATION ANIMATION ---
+        // --- REFACTORED ROTATION ANIMATION (MODIFIED) ---
         function triggerRotationAnimation() {
             if (isTranslating || isRotating) return;
             isRotating = true;
@@ -142,7 +144,17 @@
             const phaseShift = new TWEEN.Tween(waveParams)
                 .to({ phaseZ: 0 }, 2000)
                 .easing(TWEEN.Easing.Cubic.InOut)
-                .yoyo(true).repeat(1);
+                .yoyo(true).repeat(1)
+                .onStart(() => {
+                    // Make the phase value display bigger and brighter
+                    phaseValueElement.style.fontSize = '24px';
+                    phaseValueElement.style.color = '#ffff00';
+                })
+                .onComplete(() => {
+                    // Return the phase value display to its normal state
+                    phaseValueElement.style.fontSize = '16px';
+                    phaseValueElement.style.color = '#00ff88';
+                });
             
             const rotateDown = new TWEEN.Tween(projectionXZ.rotation)
                 .to({ x: 0 }, 1500) // Rotate back to original XZ plane
