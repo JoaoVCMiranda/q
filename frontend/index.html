@@ -49,7 +49,6 @@
             font-family: monospace;
             font-size: 16px;
             color: #00ff88;
-            /* MODIFICATION: Added transition for smooth font size and color changes */
             transition: font-size 0.3s ease-in-out, color 0.3s ease-in-out;
         }
 
@@ -93,10 +92,16 @@
         // --- GLOBAL STATE & PARAMETERS ---
         const waveParams = {
             points: 1000, length: 20, amplitudeY: 3, frequencyY: 0.5,
-            amplitudeZ: 3, frequencyZ: 0.5, phaseZ: Math.PI / 2
+            amplitudeZ: 3, frequencyZ: 0.5, phaseZ: 0
         };
         let waveGroup, isTranslating, isRotating;
         let isHelixVisible = true;
+
+        // --- HUD GLOBALS ---
+        let hudScene, hudCamera, hudSphereGroup, vectorLine, vectorPoint;
+        // MODIFICATION: Changed sphere radius
+        const hudSphereRadius = 150;
+
 
         // Get references to all UI elements
         const translateButton = document.getElementById('translateButton');
@@ -105,12 +110,13 @@
         const togglePhaseDisplayButton = document.getElementById('togglePhaseDisplayButton');
         const phaseValueElement = document.getElementById('phase-value');
 
-        // 1. SCENE SETUP (Unchanged)
+        // 1. SCENE SETUP
         const canvasContainer = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 8, 25);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.autoClear = false;
         canvasContainer.appendChild(renderer.domElement);
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
@@ -119,51 +125,93 @@
         // 2. HELPER FUNCTIONS
         function createSineWaveGeometry(params) { /* ... unchanged ... */ const { points, length, amplitudeY, frequencyY, amplitudeZ, frequencyZ, phaseZ } = params; const positions = []; const step = length / points; for (let i = 0; i < points; i++) { const x = i * step - length / 2; const y = amplitudeY * Math.sin(x * frequencyY); const z = amplitudeZ * Math.sin(x * frequencyZ + phaseZ); positions.push(x, y, z); } const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); geometry.userData.params = params; return geometry; }
         function createWaveSystem() { /* ... unchanged ... */ const group = new THREE.Group(); const mainWaveGeom = createSineWaveGeometry(waveParams); const sineWave = new THREE.Line(mainWaveGeom, new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 })); sineWave.name = 'mainWave'; const projectionXYGeom = new THREE.BufferGeometry(); projectionXYGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3)); const projectionXY = new THREE.Line(projectionXYGeom, new THREE.LineBasicMaterial({ color: 0xffff00 })); projectionXY.name = 'projectionXY'; const projectionXZGeom = new THREE.BufferGeometry(); projectionXZGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3)); const projectionXZ = new THREE.Line(projectionXZGeom, new THREE.LineBasicMaterial({ color: 0xff00ff })); projectionXZ.name = 'projectionXZ'; const gridSizeXZ = Math.max(waveParams.length, waveParams.amplitudeZ * 2); const gridSizeXY = Math.max(waveParams.length, waveParams.amplitudeY * 2); const gridDivisions = 10; const gridXZ = new THREE.GridHelper(gridSizeXZ, gridDivisions, 0x888888, 0x444444); const gridXY = new THREE.GridHelper(gridSizeXY, gridDivisions, 0x888888, 0x444444); gridXY.rotation.x = Math.PI / 2; const visiblePointsCount = 400, startPointIndex = 300; mainWaveGeom.setDrawRange(startPointIndex, visiblePointsCount); projectionXYGeom.setDrawRange(startPointIndex, visiblePointsCount); projectionXZGeom.setDrawRange(startPointIndex, visiblePointsCount); group.add(sineWave, projectionXY, projectionXZ, gridXZ, gridXY); return group; }
+        
+        function createAxisLabel(text, position) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const font = '48px Arial';
+            context.font = font;
+            const textMetrics = context.measureText(text);
+            canvas.width = textMetrics.width;
+            canvas.height = 48; 
+            context.font = font;
+            context.fillStyle = 'rgba(255, 255, 255, 1.0)';
+            context.fillText(text, 0, 40);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(canvas.width, canvas.height, 1.0); // Scale up for better visibility
+            sprite.position.copy(position);
+            return sprite;
+        }
+
+        function createHud() {
+            hudScene = new THREE.Scene();
+            hudCamera = new THREE.OrthographicCamera(-window.innerWidth / 2, window.innerWidth / 2, window.innerHeight / 2, -window.innerHeight / 2, 1, 1000);
+            hudCamera.position.z = 500;
+
+            hudSphereGroup = new THREE.Group();
+
+            const sphereGeom = new THREE.SphereGeometry(hudSphereRadius, 32, 16);
+            const sphereMat = new THREE.MeshBasicMaterial({ color: 0x555555, wireframe: true, transparent: true, opacity: 0.5 });
+            const sphereMesh = new THREE.Mesh(sphereGeom, sphereMat);
+            hudSphereGroup.add(sphereMesh);
+
+            const planeGeom = new THREE.CircleGeometry(hudSphereRadius, 32);
+            const planeMatXY = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+            const planeMatXZ = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+            const planeMatYZ = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+            
+            const planeXY = new THREE.Mesh(planeGeom, planeMatXY);
+            const planeXZ = new THREE.Mesh(planeGeom, planeMatXZ);
+            planeXZ.rotation.x = Math.PI / 2;
+            const planeYZ = new THREE.Mesh(planeGeom, planeMatYZ);
+            planeYZ.rotation.y = Math.PI / 2;
+            hudSphereGroup.add(planeXY, planeXZ, planeYZ);
+
+            // MODIFICATION: Increased label offset for the larger sphere
+            const labelOffset = hudSphereRadius + 30;
+            const labelX = createAxisLabel('X', new THREE.Vector3(labelOffset, 0, 0));
+            const labelY = createAxisLabel('Y', new THREE.Vector3(0, labelOffset, 0));
+            const labelZ = createAxisLabel('Z', new THREE.Vector3(0, 0, labelOffset));
+            hudSphereGroup.add(labelX, labelY, labelZ);
+
+            const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+            const linePoints = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, hudSphereRadius)];
+            const lineGeom = new THREE.BufferGeometry().setFromPoints(linePoints);
+            vectorLine = new THREE.Line(lineGeom, lineMat);
+            hudSphereGroup.add(vectorLine);
+
+            const pointGeom = new THREE.SphereGeometry(8, 16, 16); // Slightly bigger point
+            const pointMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+            vectorPoint = new THREE.Mesh(pointGeom, pointMat);
+            hudSphereGroup.add(vectorPoint);
+
+            // --- MODIFICATION: Set inclined view for the entire HUD group ---
+            hudSphereGroup.rotation.x = -Math.PI / 6; // ~-30 degrees
+            hudSphereGroup.rotation.y = Math.PI / 4;  // ~45 degrees
+
+            hudScene.add(hudSphereGroup);
+        }
+
         function setButtonsDisabled(disabled) { translateButton.disabled = disabled; rotateButton.disabled = disabled; }
         function triggerTranslateAnimation() { if (isTranslating || isRotating) return; isTranslating = true; setButtonsDisabled(true); const targetX = waveGroup.position.x === 10 ? -10 : 10; new TWEEN.Tween(waveGroup.position).to({ x: targetX }, 2500).easing(TWEEN.Easing.Cubic.InOut).onComplete(() => { isTranslating = false; setButtonsDisabled(false); }).start(); }
         function toggleHelixVisibility() { isHelixVisible = !isHelixVisible; if (waveGroup) { const helix = waveGroup.getObjectByName('mainWave'); if (helix) helix.visible = isHelixVisible; } }
         function togglePhaseDisplay() { phaseValueElement.style.display = phaseValueElement.style.display === 'none' ? 'block' : 'none'; }
         
-        // --- REFACTORED ROTATION ANIMATION (MODIFIED) ---
         function triggerRotationAnimation() {
             if (isTranslating || isRotating) return;
             isRotating = true;
             setButtonsDisabled(true);
-
             const projectionXZ = waveGroup.getObjectByName('projectionXZ');
-            if (!projectionXZ) {
-                console.error("XZ projection not found!");
-                isRotating = false; setButtonsDisabled(false);
-                return;
-            }
-
-            const rotateUp = new TWEEN.Tween(projectionXZ.rotation)
-                .to({ x: Math.PI / 2 }, 1500) // Rotate XZ plane to align with XY
-                .easing(TWEEN.Easing.Cubic.InOut);
-
-            const phaseShift = new TWEEN.Tween(waveParams)
-                .to({ phaseZ: 0 }, 2000)
-                .easing(TWEEN.Easing.Cubic.InOut)
-                .yoyo(true).repeat(1)
-                .onStart(() => {
-                    // Make the phase value display bigger and brighter
-                    phaseValueElement.style.fontSize = '24px';
-                    phaseValueElement.style.color = '#ffff00';
-                })
-                .onComplete(() => {
-                    // Return the phase value display to its normal state
-                    phaseValueElement.style.fontSize = '16px';
-                    phaseValueElement.style.color = '#00ff88';
-                });
-            
-            const rotateDown = new TWEEN.Tween(projectionXZ.rotation)
-                .to({ x: 0 }, 1500) // Rotate back to original XZ plane
-                .easing(TWEEN.Easing.Cubic.InOut)
-                .onComplete(() => {
-                    isRotating = false;
-                    setButtonsDisabled(false);
-                });
-            
+            if (!projectionXZ) { console.error("XZ projection not found!"); isRotating = false; setButtonsDisabled(false); return; }
+            const rotateUp = new TWEEN.Tween(projectionXZ.rotation).to({ x: Math.PI / 2 }, 1500).easing(TWEEN.Easing.Cubic.InOut);
+            const phaseShift = new TWEEN.Tween(waveParams).to({ phaseZ: - Math.PI }, 2000).easing(TWEEN.Easing.Cubic.InOut).yoyo(true).repeat(1)
+                .onStart(() => { phaseValueElement.style.fontSize = '24px'; phaseValueElement.style.color = '#ffff00'; })
+                .onComplete(() => { phaseValueElement.style.fontSize = '16px'; phaseValueElement.style.color = '#00ff88'; });
+            const rotateDown = new TWEEN.Tween(projectionXZ.rotation).to({ x: 0 }, 1500).easing(TWEEN.Easing.Cubic.InOut)
+                .onComplete(() => { isRotating = false; setButtonsDisabled(false); });
             rotateUp.chain(phaseShift);
             phaseShift.chain(rotateDown);
             rotateUp.start();
@@ -173,34 +221,65 @@
         function init() {
             waveGroup = createWaveSystem();
             scene.add(waveGroup);
-            
+            createHud();
             translateButton.addEventListener('click', triggerTranslateAnimation);
             rotateButton.addEventListener('click', triggerRotationAnimation);
             toggleHelixButton.addEventListener('click', toggleHelixVisibility);
             togglePhaseDisplayButton.addEventListener('click', togglePhaseDisplay);
-            
             animate();
         }
 
         // 4. MAIN LOOP
         function animate() {
             requestAnimationFrame(animate);
-            // Robust resize logic
-            const { clientWidth, clientHeight } = canvasContainer; const canvas = renderer.domElement; const needResize = canvas.width !== clientWidth || canvas.height !== clientHeight; if (needResize) { renderer.setSize(clientWidth, clientHeight, false); camera.aspect = clientWidth / clientHeight; camera.updateProjectionMatrix(); }
+            
+            const { clientWidth, clientHeight } = canvasContainer; const canvas = renderer.domElement; const needResize = canvas.width !== clientWidth || canvas.height !== clientHeight; 
+            if (needResize) { 
+                renderer.setSize(clientWidth, clientHeight, false); 
+                camera.aspect = clientWidth / clientHeight; 
+                camera.updateProjectionMatrix(); 
+                hudCamera.left = -clientWidth / 2;
+                hudCamera.right = clientWidth / 2;
+                hudCamera.top = clientHeight / 2;
+                hudCamera.bottom = -clientHeight / 2;
+                hudCamera.updateProjectionMatrix();
+            }
+            
+            // MODIFICATION: Adjusted margin for larger sphere and inclined view
+            const margin = 60; 
+            hudSphereGroup.position.set(
+                clientWidth / 2 - hudSphereRadius - margin,
+                -clientHeight / 2 + hudSphereRadius + margin,
+                0
+            );
             
             const elapsedTime = clock.getElapsedTime();
             TWEEN.update();
             controls.update();
 
-            // Update PhaseZ display text on every frame
             phaseValueElement.textContent = `phaseZ: ${waveParams.phaseZ.toFixed(3)}`;
 
-            // Update wave vertices
             const sineWave = waveGroup.getObjectByName('mainWave'); const projectionXY = waveGroup.getObjectByName('projectionXY'); const projectionXZ = waveGroup.getObjectByName('projectionXZ'); const params = sineWave.geometry.userData.params;
             for (let i = 0; i < params.points; i++) { const i3 = i * 3; const x = (i * (params.length / params.points)) - params.length / 2; const y = params.amplitudeY * Math.sin(x * params.frequencyY + elapsedTime); const z = params.amplitudeZ * Math.sin(x * params.frequencyZ + params.phaseZ + elapsedTime); const mainPositions = sineWave.geometry.attributes.position.array; mainPositions[i3] = x; mainPositions[i3 + 1] = y; mainPositions[i3 + 2] = z; const xyPositions = projectionXY.geometry.attributes.position.array; xyPositions[i3] = x; xyPositions[i3 + 1] = y; xyPositions[i3 + 2] = 0; const xzPositions = projectionXZ.geometry.attributes.position.array; xzPositions[i3] = x; xzPositions[i3 + 1] = 0; xzPositions[i3 + 2] = z; }
             sineWave.geometry.attributes.position.needsUpdate = true; projectionXY.geometry.attributes.position.needsUpdate = true; projectionXZ.geometry.attributes.position.needsUpdate = true;
             
+            const polarAngle = Math.PI / 2;
+            const azimuthalAngle = -waveParams.phaseZ;
+            const endpoint = new THREE.Vector3();
+            endpoint.setFromSphericalCoords(hudSphereRadius, polarAngle, azimuthalAngle);
+            
+            vectorPoint.position.copy(endpoint);
+            const linePositions = vectorLine.geometry.attributes.position.array;
+            linePositions[3] = endpoint.x;
+            linePositions[4] = endpoint.y;
+            linePositions[5] = endpoint.z;
+            vectorLine.geometry.attributes.position.needsUpdate = true;
+            
+            // RENDER
+            renderer.clear();
             renderer.render(scene, camera);
+            renderer.clearDepth();
+            renderer.render(hudScene, hudCamera);
         }
 
         init();
