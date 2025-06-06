@@ -3,162 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Movable Wave Group</title>
+    <title>Three.js Ephemeral Animation</title>
     <style>
-        body { margin: 0; background-color: #111; }
+        body { margin: 0; background-color: #111; color: white; }
         canvas { display: block; }
+        #controls { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10; }
+        #runButton { padding: 12px 24px; font-size: 16px; cursor: pointer; background-color: #00ff88; border: none; border-radius: 5px; color: #111; font-weight: bold; }
+        #runButton:disabled { background-color: #555; cursor: not-allowed; }
     </style>
 </head>
 <body>
+    <div id="controls">
+        <button id="runButton">Run Animation</button>
+    </div>
+
     <script type="importmap">
         {
             "imports": {
                 "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/"
+                "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/",
+                "@tweenjs/tween.js": "https://unpkg.com/@tweenjs/tween.js@21.0.0/dist/tween.esm.js"
             }
         }
     </script>
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import TWEEN from '@tweenjs/tween.js';
 
-        // 1. SCENE SETUP (Unchanged)
+        // --- GLOBAL STATE ---
+        let activeWaveGroup = null;
+        let isAnimationRunning = false;
+        const runButton = document.getElementById('runButton');
+
+        // 1. SCENE SETUP
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        // Pulled camera back to see the group move
-        camera.position.set(0, 10, 25); 
-
+        camera.position.set(0, 8, 25);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
-
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         const clock = new THREE.Clock();
 
-        // 2. GEOMETRY GENERATOR FUNCTION (Unchanged)
-        function createSineWaveGeometry(params) {
-            // ... (no changes here, function is the same)
+        // 2. HELPER: GEOMETRY GENERATOR (Unchanged)
+        function createSineWaveGeometry(params) { /* ... same as before ... */ 
             const { points = 500, length = 20, amplitudeY = 2, frequencyY = 2, amplitudeZ = 2, frequencyZ = 2, phaseZ = Math.PI / 2 } = params;
-            const positions = [];
-            const step = length / points;
+            const positions = []; const step = length / points;
             for (let i = 0; i < points; i++) {
-                const x = i * step - length / 2;
-                const y = amplitudeY * Math.sin(x * frequencyY);
-                const z = amplitudeZ * Math.sin(x * frequencyZ + phaseZ);
-                positions.push(x, y, z);
+                const x = i * step - length / 2; const y = amplitudeY * Math.sin(x * frequencyY);
+                const z = amplitudeZ * Math.sin(x * frequencyZ + phaseZ); positions.push(x, y, z);
             }
             const geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            geometry.userData.params = params;
-            return geometry;
+            geometry.userData.params = params; return geometry;
         }
 
-        // 3. CREATING THE GROUPED OBJECTS
+        // 3. REFACTORED CREATION & DISPOSAL LOGIC
         // =============================================
-        const waveParams = {
-            points: 1000,
-            length: 20,
-            amplitudeY: 3,
-            frequencyY: 0.5,
-            amplitudeZ: 3,
-            frequencyZ: 0.5,
-            phaseZ: Math.PI / 2
-        };
 
-        // --- NEW: CREATE A GROUP ---
-        const waveGroup = new THREE.Group();
-        scene.add(waveGroup); // Add the single group to the scene
+        /** Creates the entire wave system and returns it as a group. */
+        function createWaveSystem() {
+            const group = new THREE.Group();
+            const waveParams = { points: 1000, length: 20, amplitudeY: 3, frequencyY: 0.5, amplitudeZ: 3, frequencyZ: 0.5, phaseZ: Math.PI / 2 };
+            
+            // --- Create components and add names for easy access later ---
+            const mainWaveGeom = createSineWaveGeometry(waveParams);
+            const sineWave = new THREE.Line(mainWaveGeom, new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 }));
+            sineWave.name = 'mainWave';
+            
+            const projectionXYGeom = new THREE.BufferGeometry(); projectionXYGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3));
+            const projectionXY = new THREE.Line(projectionXYGeom, new THREE.LineBasicMaterial({ color: 0xffff00 }));
+            projectionXY.name = 'projectionXY';
 
-        // --- Main 3D Wave ---
-        const mainWaveGeometry = createSineWaveGeometry(waveParams);
-        const mainWaveMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 });
-        const sineWave = new THREE.Line(mainWaveGeometry, mainWaveMaterial);
-        waveGroup.add(sineWave); // Add to group, NOT scene
+            const projectionXZGeom = new THREE.BufferGeometry(); projectionXZGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3));
+            const projectionXZ = new THREE.Line(projectionXZGeom, new THREE.LineBasicMaterial({ color: 0xff00ff }));
+            projectionXZ.name = 'projectionXZ';
 
-        // --- Projections ---
-        const projectionXYGeom = new THREE.BufferGeometry();
-        projectionXYGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3));
-        const projectionXYMat = new THREE.LineBasicMaterial({ color: 0xffff00 });
-        const projectionXY = new THREE.Line(projectionXYGeom, projectionXYMat);
-        waveGroup.add(projectionXY); // Add to group
+            const gridXZ = new THREE.GridHelper(waveParams.length, 10, 0x888888, 0x444444);
+            const gridXY = new THREE.GridHelper(waveParams.length, 10, 0x888888, 0x444444); gridXY.rotation.x = Math.PI / 2;
 
-        const projectionXZGeom = new THREE.BufferGeometry();
-        projectionXZGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3));
-        const projectionXZMat = new THREE.LineBasicMaterial({ color: 0xff00ff });
-        const projectionXZ = new THREE.Line(projectionXZGeom, projectionXZMat);
-        waveGroup.add(projectionXZ); // Add to group
+            // Set draw range
+            const visiblePointsCount = 400, startPointIndex = 300;
+            mainWaveGeom.setDrawRange(startPointIndex, visiblePointsCount);
+            projectionXYGeom.setDrawRange(startPointIndex, visiblePointsCount);
+            projectionXZGeom.setDrawRange(startPointIndex, visiblePointsCount);
 
-        // --- Helper Grids ---
-        const gridSize = waveParams.length;
-        const gridDivisions = 10;
-        const gridXZ = new THREE.GridHelper(gridSize, gridDivisions, 0x888888, 0x444444);
-        //waveGroup.add(gridXZ); // Add to group
-        
-        const gridXY = new THREE.GridHelper(gridSize, gridDivisions, 0x888888, 0x444444);
-        gridXY.rotation.x = Math.PI / 2;
-        //waveGroup.add(gridXY); // Add to group
+            group.add(sineWave, projectionXY, projectionXZ, gridXZ, gridXY);
+            return group;
+        }
 
-        // --- Set Draw Range (on geometries, this is unchanged) ---
-        const gridDivisionsToShow = 4;
-        const unitsPerDivision = waveParams.length / 10;
-        const visibleLength = gridDivisionsToShow * unitsPerDivision;
-        const pointsPerUnit = waveParams.points / waveParams.length;
-        const visiblePointsCount = Math.floor(visibleLength * pointsPerUnit);
-        const startPointIndex = Math.floor((waveParams.points - visiblePointsCount) / 2);
-        
-        mainWaveGeometry.setDrawRange(startPointIndex, visiblePointsCount);
-        projectionXYGeom.setDrawRange(startPointIndex, visiblePointsCount);
-        projectionXZGeom.setDrawRange(startPointIndex, visiblePointsCount);
+        /** Properly disposes of a wave system to prevent memory leaks. */
+        function disposeWaveSystem(group) {
+            if (!group) return;
+            group.traverse(object => {
+                if (object.geometry) object.geometry.dispose();
+                if (object.material) object.material.dispose();
+            });
+            scene.remove(group);
+        }
 
-        // 4. ANIMATION LOOP
+        // 4. THE MAIN CONTROLLABLE FUNCTION
+        // =============================================
+        function runWaveAnimation() {
+            if (isAnimationRunning) return; // Prevent multiple executions
+
+            isAnimationRunning = true;
+            runButton.disabled = true;
+
+            // 1. Create
+            const waveSystem = createWaveSystem();
+            activeWaveGroup = waveSystem; // Make it accessible to the animate loop
+            waveSystem.position.x = -10;
+            scene.add(waveSystem);
+
+            // 2. Animate
+            new TWEEN.Tween(waveSystem.position)
+                .to({ x: 10 }, 4000) // 4 second duration
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .onComplete(() => {
+                    // 3. Delete
+                    disposeWaveSystem(waveSystem);
+                    activeWaveGroup = null;
+                    isAnimationRunning = false;
+                    runButton.disabled = false;
+                })
+                .start();
+        }
+
+        runButton.addEventListener('click', runWaveAnimation);
+
+        // 5. THE MAIN ANIMATION LOOP
         // =============================================
         function animate() {
             requestAnimationFrame(animate);
             const elapsedTime = clock.getElapsedTime();
             
-            // --- First, animate the individual waves (local animation) ---
-            const mainPositions = sineWave.geometry.attributes.position.array;
-            const xyPositions = projectionXY.geometry.attributes.position.array;
-            const xzPositions = projectionXZ.geometry.attributes.position.array;
-            const params = sineWave.geometry.userData.params;
+            TWEEN.update(); // Update the TWEEN engine
 
-            for (let i = 0; i < params.points; i++) {
-                const i3 = i * 3;
-                const x = (i * (params.length / params.points)) - params.length / 2;
-                const y = params.amplitudeY * Math.sin(x * params.frequencyY + elapsedTime);
-                const z = params.amplitudeZ * Math.sin(x * params.frequencyZ + params.phaseZ + elapsedTime);
-
-                mainPositions[i3] = x; mainPositions[i3 + 1] = y; mainPositions[i3 + 2] = z;
-                xyPositions[i3] = x; xyPositions[i3 + 1] = y; xyPositions[i3 + 2] = 0;
-                xzPositions[i3] = x; xzPositions[i3 + 1] = 0; xzPositions[i3 + 2] = z;
+            // Only perform vertex updates if a wave group exists
+            if (activeWaveGroup) {
+                const sineWave = activeWaveGroup.getObjectByName('mainWave');
+                const projectionXY = activeWaveGroup.getObjectByName('projectionXY');
+                const projectionXZ = activeWaveGroup.getObjectByName('projectionXZ');
+                
+                if (sineWave && projectionXY && projectionXZ) {
+                    const mainPositions = sineWave.geometry.attributes.position.array;
+                    const xyPositions = projectionXY.geometry.attributes.position.array;
+                    const xzPositions = projectionXZ.geometry.attributes.position.array;
+                    const params = sineWave.geometry.userData.params;
+                    for (let i = 0; i < params.points; i++) {
+                        const i3 = i * 3; const x = (i * (params.length / params.points)) - params.length / 2;
+                        const y = params.amplitudeY * Math.sin(x * params.frequencyY + elapsedTime);
+                        const z = params.amplitudeZ * Math.sin(x * params.frequencyZ + params.phaseZ + elapsedTime);
+                        mainPositions[i3] = x; mainPositions[i3 + 1] = y; mainPositions[i3 + 2] = z;
+                        xyPositions[i3] = x; xyPositions[i3 + 1] = y; xyPositions[i3 + 2] = 0;
+                        xzPositions[i3] = x; xzPositions[i3 + 1] = 0; xzPositions[i3 + 2] = z;
+                    }
+                    sineWave.geometry.attributes.position.needsUpdate = true;
+                    projectionXY.geometry.attributes.position.needsUpdate = true;
+                    projectionXZ.geometry.attributes.position.needsUpdate = true;
+                }
             }
-            
-            sineWave.geometry.attributes.position.needsUpdate = true;
-            projectionXY.geometry.attributes.position.needsUpdate = true;
-            projectionXZ.geometry.attributes.position.needsUpdate = true;
 
-            // --- NEW: Animate the entire group (global animation) ---
-            // Move the group in a circle on the XZ plane
-            const radius = 5;
-            const speed = 0.5;
-            //waveGroup.position.x = Math.sin(elapsedTime * speed) * radius;
-            //waveGroup.position.z = Math.cos(elapsedTime * speed) * radius;
-
-            // Also slowly rotate the whole group
-            //waveGroup.rotation.y = elapsedTime * 0.2;
-
-
-            // --- Render ---
             controls.update();
             renderer.render(scene, camera);
         }
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
 
         animate();
     </script>
