@@ -63,6 +63,9 @@
 
         let hudSphereGroup;
         let fractalGridGroup;
+        let gridSize = 200;
+        let divisions = 10;
+        let gridHelper;
 
         // Function to create the HudSphere
         function createHudSphere() {
@@ -91,25 +94,35 @@
         // Function to create the fractal grid (parallel to the camera)
         function createFractalGrid() {
             fractalGridGroup = new THREE.Group();
-            const gridSize = 200;
-            const divisions = 10;
-
-            const gridHelper = new THREE.GridHelper(gridSize, divisions, 0xffffff, 0xffffff);
+            gridHelper = new THREE.GridHelper(gridSize, divisions, 0xffffff, 0xffffff);
             gridHelper.rotation.x = Math.PI / 2; // Orient the grid parallel to the camera (XY plane)
             fractalGridGroup.add(gridHelper);
             scene.add(fractalGridGroup);
         }
 
-        // Function to animate the fractal grid
+        // Function to animate the fractal grid (zoom + increase divisions)
         function startFractalGridAnimation() {
             if (!fractalGridGroup) return;
 
             let scaleFactor = { value: 1 };
+            let divisionFactor = { value: divisions };
 
             new TWEEN.Tween(scaleFactor)
                 .to({ value: 5 }, 3000) // Zoom in effect
                 .onUpdate(() => {
                     fractalGridGroup.scale.set(scaleFactor.value, scaleFactor.value, scaleFactor.value);
+                })
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .start();
+
+            new TWEEN.Tween(divisionFactor)
+                .to({ value: 50 }, 3000) // Increase divisions dynamically
+                .onUpdate(() => {
+                    scene.remove(gridHelper);
+                    gridHelper = new THREE.GridHelper(gridSize, Math.floor(divisionFactor.value), 0xffffff, 0xffffff);
+                    gridHelper.rotation.x = Math.PI / 2;
+                    fractalGridGroup.add(gridHelper);
+                    scene.add(fractalGridGroup);
                 })
                 .easing(TWEEN.Easing.Quadratic.InOut)
                 .start();
