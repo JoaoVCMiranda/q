@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Ephemeral Animation</title>
+    <title>Three.js Cinematic Wave Animation</title>
     <style>
         body { margin: 0; background-color: #111; color: white; }
         canvas { display: block; }
@@ -31,7 +31,16 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import TWEEN from '@tweenjs/tween.js';
 
-        // --- GLOBAL STATE ---
+        // --- GLOBAL STATE & PARAMETERS ---
+        const waveParams = {
+            points: 1000, length: 20,
+            amplitudeY: 3, frequencyY: 0.5,
+            amplitudeZ: 3, frequencyZ: 0.5,
+            phaseZ: Math.PI / 3
+        };
+        const cameraStartPos = new THREE.Vector3(0, 8, 25);
+        const cameraEndPos = new THREE.Vector3(15, 6, 20);
+
         let activeWaveGroup = null;
         let isAnimationRunning = false;
         const runButton = document.getElementById('runButton');
@@ -39,7 +48,7 @@
         // 1. SCENE SETUP
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 8, 25);
+        camera.position.copy(cameraStartPos); // Set initial position
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
@@ -49,7 +58,7 @@
 
         // 2. HELPER: GEOMETRY GENERATOR (Unchanged)
         function createSineWaveGeometry(params) { /* ... same as before ... */ 
-            const { points = 500, length = 20, amplitudeY = 2, frequencyY = 2, amplitudeZ = 2, frequencyZ = 2, phaseZ = Math.PI / 2 } = params;
+            const { points, length, amplitudeY, frequencyY, amplitudeZ, frequencyZ, phaseZ } = params;
             const positions = []; const step = length / points;
             for (let i = 0; i < points; i++) {
                 const x = i * step - length / 2; const y = amplitudeY * Math.sin(x * frequencyY);
@@ -61,29 +70,31 @@
         }
 
         // 3. REFACTORED CREATION & DISPOSAL LOGIC
-        // =============================================
-
-        /** Creates the entire wave system and returns it as a group. */
         function createWaveSystem() {
             const group = new THREE.Group();
-            const waveParams = { points: 1000, length: 20, amplitudeY: 3, frequencyY: 0.5, amplitudeZ: 3, frequencyZ: 0.5, phaseZ: Math.PI / 2 };
             
-            // --- Create components and add names for easy access later ---
+            // --- Create components (using global waveParams) ---
             const mainWaveGeom = createSineWaveGeometry(waveParams);
             const sineWave = new THREE.Line(mainWaveGeom, new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 }));
             sineWave.name = 'mainWave';
-            
+            // ... (other projections created similarly) ...
             const projectionXYGeom = new THREE.BufferGeometry(); projectionXYGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3));
             const projectionXY = new THREE.Line(projectionXYGeom, new THREE.LineBasicMaterial({ color: 0xffff00 }));
             projectionXY.name = 'projectionXY';
-
             const projectionXZGeom = new THREE.BufferGeometry(); projectionXZGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3));
             const projectionXZ = new THREE.Line(projectionXZGeom, new THREE.LineBasicMaterial({ color: 0xff00ff }));
             projectionXZ.name = 'projectionXZ';
 
-            const gridXZ = new THREE.GridHelper(waveParams.length, 10, 0x888888, 0x444444);
-            const gridXY = new THREE.GridHelper(waveParams.length, 10, 0x888888, 0x444444); gridXY.rotation.x = Math.PI / 2;
 
+            // --- NEW: DYNAMIC GRIDS ---
+            // Ensure grid is large enough for both length and amplitude
+            const gridSizeXZ = Math.max(waveParams.length, waveParams.amplitudeZ * 2);
+            const gridSizeXY = Math.max(waveParams.length, waveParams.amplitudeY * 2);
+            const gridDivisions = 10;
+            const gridXZ = new THREE.GridHelper(gridSizeXZ, gridDivisions, 0x888888, 0x444444);
+            const gridXY = new THREE.GridHelper(gridSizeXY, gridDivisions, 0x888888, 0x444444);
+            gridXY.rotation.x = Math.PI / 2;
+            
             // Set draw range
             const visiblePointsCount = 400, startPointIndex = 300;
             mainWaveGeom.setDrawRange(startPointIndex, visiblePointsCount);
@@ -94,9 +105,8 @@
             return group;
         }
 
-        /** Properly disposes of a wave system to prevent memory leaks. */
         function disposeWaveSystem(group) {
-            if (!group) return;
+             if (!group) return;
             group.traverse(object => {
                 if (object.geometry) object.geometry.dispose();
                 if (object.material) object.material.dispose();
@@ -105,49 +115,59 @@
         }
 
         // 4. THE MAIN CONTROLLABLE FUNCTION
-        // =============================================
         function runWaveAnimation() {
-            if (isAnimationRunning) return; // Prevent multiple executions
-
+            if (isAnimationRunning) return;
             isAnimationRunning = true;
             runButton.disabled = true;
 
-            // 1. Create
+            // --- Reset camera to start position before animating ---
+            camera.position.copy(cameraStartPos);
+
+            // 1. Create System
             const waveSystem = createWaveSystem();
-            activeWaveGroup = waveSystem; // Make it accessible to the animate loop
+            activeWaveGroup = waveSystem;
             waveSystem.position.x = -10;
             scene.add(waveSystem);
 
-            // 2. Animate
+            // 2. Animate Group
+            const duration = 4000;
             new TWEEN.Tween(waveSystem.position)
-                .to({ x: 10 }, 4000) // 4 second duration
+                .to({ x: 10 }, duration)
                 .easing(TWEEN.Easing.Cubic.InOut)
                 .onComplete(() => {
-                    // 3. Delete
+                    // 3. Delete System
                     disposeWaveSystem(waveSystem);
                     activeWaveGroup = null;
                     isAnimationRunning = false;
                     runButton.disabled = false;
                 })
                 .start();
+            
+            // --- NEW: Animate Camera in parallel ---
+            new TWEEN.Tween(camera.position)
+                .to({ x: cameraEndPos.x, y: cameraEndPos.y, z: cameraEndPos.z }, duration)
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .start();
         }
-
         runButton.addEventListener('click', runWaveAnimation);
 
         // 5. THE MAIN ANIMATION LOOP
-        // =============================================
         function animate() {
             requestAnimationFrame(animate);
             const elapsedTime = clock.getElapsedTime();
             
-            TWEEN.update(); // Update the TWEEN engine
+            TWEEN.update(); // Update both TWEENs (group and camera)
 
-            // Only perform vertex updates if a wave group exists
             if (activeWaveGroup) {
+                // --- NEW: Always frame the animation ---
+                // This makes the camera track the group's center point.
+                camera.lookAt(activeWaveGroup.position);
+                
+                // Update the wave vertices (internal animation)
+                // ... same logic as before to update vertex positions ...
                 const sineWave = activeWaveGroup.getObjectByName('mainWave');
                 const projectionXY = activeWaveGroup.getObjectByName('projectionXY');
                 const projectionXZ = activeWaveGroup.getObjectByName('projectionXZ');
-                
                 if (sineWave && projectionXY && projectionXZ) {
                     const mainPositions = sineWave.geometry.attributes.position.array;
                     const xyPositions = projectionXY.geometry.attributes.position.array;
@@ -167,6 +187,8 @@
                 }
             }
 
+            // Let OrbitControls update if user is not animating,
+            // but the lookAt will override it during the animation.
             controls.update();
             renderer.render(scene, camera);
         }
