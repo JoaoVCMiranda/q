@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optimized Fractal Zoom</title>
+    <title>Fractal Zoom Exporter</title>
     <style>
         body {
             margin: 0;
@@ -15,35 +15,21 @@
         #canvas-container {
             flex-grow: 1;
         }
-        .control-button {
-            position: absolute;
-            left: 20px;
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-        }
-        .control-button:hover {
-            background-color: #0056b3;
-        }
-        #startFractalZoomButton {
-            top: 50%;
-        }
     </style>
 </head>
 <body>
-    <button id="startFractalZoomButton" class="control-button">Start Fractal Zoom</button>
     <div id="canvas-container"></div>
 
     <script type="importmap">
-        { "imports": { 
-            "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
-            "@tweenjs/tween.js": "https://unpkg.com/@tweenjs/tween.js@21.0.0/dist/tween.esm.js"
-        } }
+        {
+            "imports": { 
+                "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
+                "@tweenjs/tween.js": "https://unpkg.com/@tweenjs/tween.js@21.0.0/dist/tween.esm.js"
+            }
+        }
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
     <script type="module">
         import * as THREE from 'three';
         import TWEEN from '@tweenjs/tween.js';
@@ -95,7 +81,7 @@
         // Function to animate zooming into the fractal
         function startFractalZoomAnimation() {
             let zoomFactor = { value: 1 };
-            let depthFactor = { value: 3 };
+            let depthFactor = { value: 2 };
 
             new TWEEN.Tween(zoomFactor)
                 .to({ value: 10 }, 5000) // Zoom in effect
@@ -141,8 +127,86 @@
         }
         animate();
 
-        // Event listener for animation start
-        document.getElementById('startFractalZoomButton').addEventListener('click', startFractalZoomAnimation);
+        // // **EXPORTER MODULE** - Captures the animation and saves it as a video
+        // function startRecording() {
+        //     const canvas = renderer.domElement;
+        //     const stream = canvas.captureStream(60); // 30 FPS recording
+        //     const recorder = new MediaRecorder(stream);
+        //     const chunks = [];
+
+        //     recorder.ondataavailable = event => chunks.push(event.data);
+        //     recorder.onstop = () => {
+        //         const blob = new Blob(chunks, { type: 'video/webm' });
+        //         const url = URL.createObjectURL(blob);
+        //         const a = document.createElement('a');
+        //         a.href = url;
+        //         a.download = 'fractal_animation.webm';
+        //         document.body.appendChild(a);
+        //         a.click();
+        //         document.body.removeChild(a);
+        //     };
+
+        //     recorder.start();
+        //     startFractalZoomAnimation();
+
+        //     // Stop recording after animation completes
+        //     setTimeout(() => recorder.stop(), 10000);
+        // }
+
+        // // Start recording automatically
+        // startRecording();
+        // Criando um render target para capturar os frames
+        const renderTarget = new THREE.WebGLRenderTarget(1920, 1080);
+        renderer.setRenderTarget(renderTarget);
+
+        let frames = [];
+        let frameIndex = 0;
+
+        function captureFrame() {
+            renderer.render(scene, camera);
+            const canvas = renderer.domElement;
+            canvas.toBlob(blob => {
+                frames.push(blob);
+            }, 'image/png');
+        }
+
+        
+
+        async function downloadAsZip(files) {
+        const zip = new JSZip(); // Use global JSZip object
+
+        // Add files to the ZIP
+        files.forEach(({ name, content }) => {
+            zip.file(name, content);
+        });
+
+        // Generate ZIP file
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const zipUrl = URL.createObjectURL(zipBlob);
+
+        // Create a download link
+        const a = document.createElement("a");
+        a.href = zipUrl;
+        a.download = "files.zip";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        }
+
+        function startFrameCapture(duration = 5, fps = 60) {
+            const totalFrames = duration * fps;
+            let interval = setInterval(() => {
+                if (frameIndex >= totalFrames) {
+                    clearInterval(interval);
+                    downloadAsZip(frames);
+                } else {
+                    captureFrame();
+                    frameIndex++;
+                }
+            }, 1000 / fps);
+        }
+        startFractalZoomAnimation();
+        startFrameCapture();
     </script>
 </body>
 </html>
