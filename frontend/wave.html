@@ -77,6 +77,17 @@
         <button id="rotateButton" class="control-button secondary">Animate Phase</button>
         <button id="toggleHelixButton" class="control-button tertiary">Toggle 3D Helix</button>
         <button id="toggle2DProjection" class="control-button quaternary">Toggle 2D Projection</button>
+        
+        <button id="sendZ0" class="control-button primary">Z0</button>
+        <button id="sendZ1" class="control-button primary">Z1</button>
+        <button id="sendX0" class="control-button primary">X0</button>
+        <button id="sendX1" class="control-button primary">X1</button>
+
+        <button id="getCamera" class="control-button secondary">getCamera</button>
+        
+
+        <button id="startRecording" class="control-button quaternary">Start Recording</button>
+        <button id="stopRecording" class="control-button quaternary">Stop Recording</button>
     </div>
 
     <div id="info-display">
@@ -93,7 +104,7 @@
         // --- GLOBAL STATE & PARAMETERS ---
         const waveParams = {
             points: 1000, length: 20, amplitudeY: 3, frequencyY: 0.5,
-            amplitudeZ: 3, frequencyZ: 0.5, phaseZ: 0
+            amplitudeZ: 3, frequencyZ: 0.5, phaseZ: 0, rotation: 0
         };
         let waveGroup, isTranslating, isRotating;
         let isHelixVisible = true;
@@ -111,7 +122,18 @@
         const toggleHelixButton = document.getElementById('toggleHelixButton');
         const togglePhaseDisplayButton = document.getElementById('togglePhaseDisplayButton');
         const phaseValueElement = document.getElementById('phase-value');
-        const toggleProjectionsVisibilityButton = document.getElementById('toggle2DProjection');    
+        const toggleProjectionsVisibilityButton = document.getElementById('toggle2DProjection');
+        const startRecordingButton = document.getElementById('startRecording');    
+        const stopRecordingButton = document.getElementById('stopRecording');
+        
+        const sendZ0Button = document.getElementById('sendZ0');
+        const sendZ1Button = document.getElementById('sendZ1');
+        const sendX0Button = document.getElementById('sendX0');
+        const sendX1Button = document.getElementById('sendX1');
+
+        const getCameraButton = document.getElementById('getCamera');
+
+
 
         // 1. SCENE SETUP
         const canvasContainer = document.getElementById('canvas-container');
@@ -128,7 +150,24 @@
         // 2. HELPER FUNCTIONS
         function createSineWaveGeometry(params) { /* ... unchanged ... */ const { points, length, amplitudeY, frequencyY, amplitudeZ, frequencyZ, phaseZ } = params; const positions = []; const step = length / points; for (let i = 0; i < points; i++) { const x = i * step - length / 2; const y = amplitudeY * Math.sin(x * frequencyY); const z = amplitudeZ * Math.sin(x * frequencyZ + phaseZ); positions.push(x, y, z); } const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); geometry.userData.params = params; return geometry; }
         function createWaveSystem() { /* ... unchanged ... */ const group = new THREE.Group(); const mainWaveGeom = createSineWaveGeometry(waveParams); const sineWave = new THREE.Line(mainWaveGeom, new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 })); sineWave.name = 'mainWave'; const projectionXYGeom = new THREE.BufferGeometry(); projectionXYGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3)); const projectionXY = new THREE.Line(projectionXYGeom, new THREE.LineBasicMaterial({ color: 0xffff00 })); projectionXY.name = 'projectionXY'; const projectionXZGeom = new THREE.BufferGeometry(); projectionXZGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3)); const projectionXZ = new THREE.Line(projectionXZGeom, new THREE.LineBasicMaterial({ color: 0xff00ff })); projectionXZ.name = 'projectionXZ'; const gridSizeXZ = Math.max(waveParams.length, waveParams.amplitudeZ * 2); const gridSizeXY = Math.max(waveParams.length, waveParams.amplitudeY * 2); const gridDivisions = 10; const gridXZ = new THREE.GridHelper(gridSizeXZ, gridDivisions, 0x888888, 0x444444); const gridXY = new THREE.GridHelper(gridSizeXY, gridDivisions, 0x888888, 0x444444); gridXY.rotation.x = Math.PI / 2; const visiblePointsCount = 400, startPointIndex = 300; mainWaveGeom.setDrawRange(startPointIndex, visiblePointsCount); projectionXYGeom.setDrawRange(startPointIndex, visiblePointsCount); projectionXZGeom.setDrawRange(startPointIndex, visiblePointsCount); group.add(sineWave, projectionXY, projectionXZ, gridXZ, gridXY); return group; }
-        
+        // RECORDER SETUP
+        const canvas = renderer.domElement;
+        const stream = canvas.captureStream(60); 
+        const recorder = new MediaRecorder(stream);
+        const chunks = [];
+
+        recorder.ondataavailable = event => chunks.push(event.data);
+        recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'fractal_animation.webm';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        };
+
         function createAxisLabel(text, position) {
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
@@ -175,9 +214,9 @@
 
             // MODIFICATION: Increased label offset for the larger sphere
             const labelOffset = hudSphereRadius + 30;
-            const labelX = createAxisLabel('X', new THREE.Vector3(labelOffset, 0, 0));
-            const labelY = createAxisLabel('Y', new THREE.Vector3(0, labelOffset, 0));
-            const labelZ = createAxisLabel('Z', new THREE.Vector3(0, 0, labelOffset));
+            const labelX = createAxisLabel('|0⟩+i|1⟩', new THREE.Vector3(labelOffset, 0, 0));
+            const labelY = createAxisLabel('|0⟩', new THREE.Vector3(0, labelOffset, 0));
+            const labelZ = createAxisLabel('|+⟩', new THREE.Vector3(0, 0, -labelOffset));
             hudSphereGroup.add(labelX, labelY, labelZ);
 
             const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
@@ -192,8 +231,13 @@
             hudSphereGroup.add(vectorPoint);
 
             // --- MODIFICATION: Set inclined view for the entire HUD group ---
-            hudSphereGroup.rotation.x = -Math.PI / 6; // ~-30 degrees
-            hudSphereGroup.rotation.y = Math.PI / 4;  // ~45 degrees
+            hudSphereGroup.rotation.x = - Math.PI /2 ;
+            hudSphereGroup.rotation.y = - Math.PI /2 ;
+            hudSphereGroup.rotation.z = - Math.PI /2 ;
+            
+
+            //hudSphereGroup.rotation.y = Math.PI / 4;  // ~45 degrees
+            
 
             hudScene.add(hudSphereGroup);
         }
@@ -201,9 +245,20 @@
         function setButtonsDisabled(disabled) { translateButton.disabled = disabled; rotateButton.disabled = disabled; }
         function triggerTranslateAnimation() { if (isTranslating || isRotating) return; isTranslating = true; setButtonsDisabled(true); const targetX = waveGroup.position.x === -10 ? 100 : -10; new TWEEN.Tween(waveGroup.position).to({ x: targetX }, 2500).easing(TWEEN.Easing.Cubic.InOut).onComplete(() => { isTranslating = false; setButtonsDisabled(false); }).start(); }
         function toggleHelixVisibility() { isHelixVisible = !isHelixVisible; if (waveGroup) { const helix = waveGroup.getObjectByName('mainWave'); if (helix) helix.visible = isHelixVisible; } }
-        function toggleProjectionsVisibility() { isPhaseDisplayVisible = !isPhaseDisplayVisible; if (waveGroup) { const projXY = waveGroup.getObjectByName('projectionXY');const projXZ = waveGroup.getObjectByName('projectionXZ'); if (projXY) projXY.visible = isPhaseDisplayVisible; if (projXZ) projXZ.visible = isPhaseDisplayVisible; } }
+        function toggleProjectionsVisibility() { isProjectionVisible = !isProjectionVisible; if (waveGroup) { const projXY = waveGroup.getObjectByName('projectionXY');const projXZ = waveGroup.getObjectByName('projectionXZ'); if (projXY) projXY.visible = isProjectionVisible; if (projXZ) projXZ.visible = isProjectionVisible; } }
         function togglePhaseDisplay() { phaseValueElement.style.display = phaseValueElement.style.display === 'none' ? 'block' : 'none'; }
-        
+        function startRecording() { recorder.start(); console.log("Recording Started");}
+        function stopRecording() { recorder.stop(); console.log("Recording Stopped"); }
+
+        function sendZ0(){new TWEEN.Tween(waveGroup.rotation).to({x : 0}).easing(TWEEN.Easing.Cubic.InOut).start();};
+        function sendZ1(){new TWEEN.Tween(waveGroup.rotation).to({x : Math.PI/2}).easing(TWEEN.Easing.Cubic.InOut).start();};
+        function sendX0(){new TWEEN.Tween(waveGroup.rotation).to({x : -Math.PI/4}).easing(TWEEN.Easing.Cubic.InOut).start();};
+        function sendX1(){new TWEEN.Tween(waveGroup.rotation).to({x : Math.PI/4}).easing(TWEEN.Easing.Cubic.InOut).start();};
+
+        //function getCamera(){console.log(camera.position)};
+        function getCamera(camera) {console.log("Camera Properties:");console.log(camera);console.log(controls)}// console.log(`Quaternion: x=${camera.quaternion.x}, y=${camera.quaternion.y}, z=${camera.quaternion.z}, w=${camera.quaternion.w}`);console.log(`Rotation: x=${camera.rotation.x}, y=${camera.rotation.y}, z=${camera.rotation.z}`);console.log(`Target (OrbitControls): x=${controls.target.x}, y=${controls.target.y}, z=${controls.target.z}`);console.log(`FOV: ${camera.fov}`);console.log(`Aspect Ratio: ${camera.aspect}`);console.log(`Near: ${camera.near}, Far: ${camera.far}`);console.log(`Zoom: ${camera.zoom}`);console.log(`Matrix World:`, camera.matrixWorld.elements);
+
+
         function triggerRotationAnimation() {
             if (isTranslating || isRotating) return;
             isRotating = true;
@@ -211,8 +266,8 @@
             const projectionXZ = waveGroup.getObjectByName('projectionXZ');
             if (!projectionXZ) { console.error("XZ projection not found!"); isRotating = false; setButtonsDisabled(false); return; }
             const rotateUp = new TWEEN.Tween(projectionXZ.rotation).to({ x: Math.PI / 2 }, 1500).easing(TWEEN.Easing.Cubic.InOut);
-            const phaseShift = new TWEEN.Tween(waveParams).to({ phaseZ: - Math.PI }, 2000).easing(TWEEN.Easing.Cubic.InOut).yoyo(true).repeat(1)
-                .onStart(() => { phaseValueElement.style.fontSize = '24px'; phaseValueElement.style.color = '#ffff00'; })
+            const phaseShift = new TWEEN.Tween(waveParams).to({ phaseZ: 2* Math.PI }, 5000).easing(TWEEN.Easing.Cubic.InOut).yoyo(true).repeat(1)
+                .onStart(() => { phaseValueElement.style.fontSize = '48px'; phaseValueElement.style.color = '#ffff00'; })
                 .onComplete(() => { phaseValueElement.style.fontSize = '16px'; phaseValueElement.style.color = '#00ff88'; });
             const rotateDown = new TWEEN.Tween(projectionXZ.rotation).to({ x: 0 }, 1500).easing(TWEEN.Easing.Cubic.InOut)
                 .onComplete(() => { isRotating = false; setButtonsDisabled(false); });
@@ -230,6 +285,16 @@
             rotateButton.addEventListener('click', triggerRotationAnimation);
             toggleHelixButton.addEventListener('click', toggleHelixVisibility);
             toggleProjectionsVisibilityButton.addEventListener('click', toggleProjectionsVisibility);
+            startRecordingButton.addEventListener('click', startRecording);
+            stopRecordingButton.addEventListener('click', stopRecording);
+            
+            sendZ0Button.addEventListener('click', sendZ0);
+            sendZ1Button.addEventListener('click', sendZ1);
+            sendX0Button.addEventListener('click', sendX0);
+            sendX1Button.addEventListener('click', sendX1);
+
+            getCameraButton.addEventListener('click', getCamera);
+
             animate();
         }
 
@@ -256,19 +321,21 @@
                 -clientHeight / 2 + hudSphereRadius + margin,
                 0
             );
-            
+            //waveGroup.rotation.x -= 0.005;
+            //waveGroup.rotation.x = Math.PI/4;
+
             const elapsedTime = clock.getElapsedTime();
             TWEEN.update();
             controls.update();
 
             phaseValueElement.textContent = `phaseZ: ${waveParams.phaseZ.toFixed(3)}`;
-            //waveGroup.rotation.x += 0.01;
+
             const sineWave = waveGroup.getObjectByName('mainWave'); const projectionXY = waveGroup.getObjectByName('projectionXY'); const projectionXZ = waveGroup.getObjectByName('projectionXZ'); const params = sineWave.geometry.userData.params;
             for (let i = 0; i < params.points; i++) { const i3 = i * 3; const x = (i * (params.length / params.points)) - params.length / 2; const y = params.amplitudeY * Math.sin(x * params.frequencyY + elapsedTime); const z = params.amplitudeZ * Math.sin(x * params.frequencyZ + params.phaseZ + elapsedTime); const mainPositions = sineWave.geometry.attributes.position.array; mainPositions[i3] = x; mainPositions[i3 + 1] = y; mainPositions[i3 + 2] = z; const xyPositions = projectionXY.geometry.attributes.position.array; xyPositions[i3] = x; xyPositions[i3 + 1] = y; xyPositions[i3 + 2] = 0; const xzPositions = projectionXZ.geometry.attributes.position.array; xzPositions[i3] = x; xzPositions[i3 + 1] = 0; xzPositions[i3 + 2] = z; }
             sineWave.geometry.attributes.position.needsUpdate = true; projectionXY.geometry.attributes.position.needsUpdate = true; projectionXZ.geometry.attributes.position.needsUpdate = true;
             
-            const polarAngle = Math.PI / 2;
-            const azimuthalAngle = -waveParams.phaseZ;
+            const polarAngle = waveGroup.rotation.x*2;
+            const azimuthalAngle = waveParams.phaseZ;
             const endpoint = new THREE.Vector3();
             endpoint.setFromSphericalCoords(hudSphereRadius, polarAngle, azimuthalAngle);
             
@@ -278,7 +345,7 @@
             linePositions[4] = endpoint.y;
             linePositions[5] = endpoint.z;
             vectorLine.geometry.attributes.position.needsUpdate = true;
-            
+            //vectorPoint.rotation
             // RENDER
             renderer.clear();
             renderer.render(scene, camera);

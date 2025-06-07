@@ -127,86 +127,38 @@
         }
         animate();
 
-        // // **EXPORTER MODULE** - Captures the animation and saves it as a video
-        // function startRecording() {
-        //     const canvas = renderer.domElement;
-        //     const stream = canvas.captureStream(60); // 30 FPS recording
-        //     const recorder = new MediaRecorder(stream);
-        //     const chunks = [];
+        // **EXPORTER MODULE** - Captures the animation and saves it as a video
+        function startRecording() {
+            const canvas = renderer.domElement;
+            const stream = canvas.captureStream(60); // 30 FPS recording
+            const recorder = new MediaRecorder(stream);
+            const chunks = [];
 
-        //     recorder.ondataavailable = event => chunks.push(event.data);
-        //     recorder.onstop = () => {
-        //         const blob = new Blob(chunks, { type: 'video/webm' });
-        //         const url = URL.createObjectURL(blob);
-        //         const a = document.createElement('a');
-        //         a.href = url;
-        //         a.download = 'fractal_animation.webm';
-        //         document.body.appendChild(a);
-        //         a.click();
-        //         document.body.removeChild(a);
-        //     };
+            recorder.ondataavailable = event => chunks.push(event.data);
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'fractal_animation.webm';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
 
-        //     recorder.start();
-        //     startFractalZoomAnimation();
+            recorder.start();
+            createHudSphere();
+            startFractalZoomAnimation();
+            startHudSphereAnimation()
 
-        //     // Stop recording after animation completes
-        //     setTimeout(() => recorder.stop(), 10000);
-        // }
+            // Stop recording after animation completes
+            setTimeout(() => recorder.stop(), 10000);
+        }
 
         // // Start recording automatically
-        // startRecording();
+        startRecording();
         // Criando um render target para capturar os frames
-        const renderTarget = new THREE.WebGLRenderTarget(1920, 1080);
-        renderer.setRenderTarget(renderTarget);
 
-        let frames = [];
-        let frameIndex = 0;
-
-        function captureFrame() {
-            renderer.render(scene, camera);
-            const canvas = renderer.domElement;
-            canvas.toBlob(blob => {
-                frames.push(blob);
-            }, 'image/png');
-        }
-
-        
-
-        async function downloadAsZip(files) {
-        const zip = new JSZip(); // Use global JSZip object
-
-        // Add files to the ZIP
-        files.forEach(({ name, content }) => {
-            zip.file(name, content);
-        });
-
-        // Generate ZIP file
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        const zipUrl = URL.createObjectURL(zipBlob);
-
-        // Create a download link
-        const a = document.createElement("a");
-        a.href = zipUrl;
-        a.download = "files.zip";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        }
-
-        function startFrameCapture(duration = 5, fps = 60) {
-            const totalFrames = duration * fps;
-            let interval = setInterval(() => {
-                if (frameIndex >= totalFrames) {
-                    clearInterval(interval);
-                    downloadAsZip(frames);
-                } else {
-                    captureFrame();
-                    frameIndex++;
-                }
-            }, 1000 / fps);
-        }
-        startFractalZoomAnimation();
-        startFrameCapture();
     </script>
 </body>
 </html>

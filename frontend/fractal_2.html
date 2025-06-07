@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fractal Zoom to HudSphere</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        #startAnimationButton {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 30px;
+            font-size: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #008cff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            z-index: 10;
+            transition: opacity 0.5s ease;
+        }
+        #startAnimationButton:hover {
+            background-color: #00aaff;
+        }
+        #startAnimationButton:disabled {
+             opacity: 0;
+             cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <button id="startAnimationButton">Begin Journey</button>
+
+    <script type="importmap">
+        {
+            "imports": { 
+                "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
+                "@tweenjs/tween.js": "https://unpkg.com/@tweenjs/tween.js@21.0.0/dist/tween.esm.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import TWEEN from '@tweenjs/tween.js';
+
+        // --- REFERENCES & SETUP ---
+        const canvasContainer = document.getElementById('canvas-container');
+        const startButton = document.getElementById('startAnimationButton');
+        
+        const scene = new THREE.Scene();
+        const camera = new THREE.OrthographicCamera(
+            -window.innerWidth / 2, window.innerWidth / 2, 
+            window.innerHeight / 2, -window.innerHeight / 2, 
+            1, 2000
+        );
+        camera.position.z = 1000;
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        canvasContainer.appendChild(renderer.domElement);
+
+        // --- GLOBAL OBJECTS ---
+        let fractalGroup;
+        let hudSphereGroup;
+
+        const fractalInitialSize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+        const fractalDivisions = 10;
+        const fractalInitialDepth = 3;
+        const hudSphereRadius = 150;
+
+        // --- COMPONENT CREATION ---
+
+        /**
+         * Recursively creates the fractal grid system.
+         */
+        function createFractalGrid(position, size, depth, parentGroup) {
+            if (depth === 0) return;
+
+            const gridHelper = new THREE.GridHelper(size, fractalDivisions, 0x555555, 0x222222);
+            gridHelper.position.copy(position);
+            gridHelper.rotation.x = Math.PI / 2; // Orient grid to face the camera
+            parentGroup.add(gridHelper);
+
+            const newSize = size / 2;
+            const newDepth = depth - 1;
+            const offset = size / 4; // Offset to place new grids in the center of quadrants
+
+            createFractalGrid(new THREE.Vector3(position.x - offset, position.y + offset, position.z), newSize, newDepth, parentGroup);
+            createFractalGrid(new THREE.Vector3(position.x + offset, position.y + offset, position.z), newSize, newDepth, parentGroup);
+            createFractalGrid(new THREE.Vector3(position.x - offset, position.y - offset, position.z), newSize, newDepth, parentGroup);
+            createFractalGrid(new THREE.Vector3(position.x + offset, position.y - offset, position.z), newSize, newDepth, parentGroup);
+        }
+        
+        /**
+         * Creates the HudSphere (Bloch Sphere) object.
+         */
+        function createHudSphere() {
+            hudSphereGroup = new THREE.Group();
+            
+            const sphereGeom = new THREE.SphereGeometry(hudSphereRadius, 32, 16);
+            const sphereMat = new THREE.MeshBasicMaterial({ color: 0xcccccc, wireframe: true, transparent: true, opacity: 0.5 });
+            hudSphereGroup.add(new THREE.Mesh(sphereGeom, sphereMat));
+
+            const planeGeom = new THREE.CircleGeometry(hudSphereRadius, 32);
+            const planeMat = new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+            const planeXY = new THREE.Mesh(planeGeom, planeMat.clone());
+            const planeXZ = new THREE.Mesh(planeGeom, planeMat.clone());
+            planeXZ.rotation.x = Math.PI / 2;
+            const planeYZ = new THREE.Mesh(planeGeom, planeMat.clone());
+            planeYZ.rotation.y = Math.PI / 2;
+            hudSphereGroup.add(planeXY, planeXZ, planeYZ);
+
+            const labelOffset = hudSphereRadius + 30;
+            hudSphereGroup.add(createAxisLabel('|0⟩', new THREE.Vector3(0, labelOffset, 0))); // Top
+            hudSphereGroup.add(createAxisLabel('|1⟩', new THREE.Vector3(0, -labelOffset, 0))); // Bottom
+            hudSphereGroup.add(createAxisLabel('|+⟩', new THREE.Vector3(labelOffset, 0, 0))); // Right
+
+            // Set initial state: tiny and invisible
+            hudSphereGroup.scale.set(0.01, 0.01, 0.01);
+            hudSphereGroup.visible = false;
+            
+            scene.add(hudSphereGroup);
+        }
+
+        /**
+         * Helper to create text labels for the HudSphere.
+         */
+        function createAxisLabel(text, position) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const fontSize = 48;
+            const font = `${fontSize}px Arial`;
+            context.font = font;
+            const textMetrics = context.measureText(text);
+            canvas.width = textMetrics.width;
+            canvas.height = fontSize * 1.2;
+            context.font = font;
+            context.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            context.fillText(text, 0, fontSize);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(canvas.width, canvas.height, 1.0);
+            sprite.position.copy(position);
+            return sprite;
+        }
+
+        // --- ANIMATION LOGIC ---
+
+        function startFullAnimationSequence() {
+            startButton.disabled = true;
+
+            // --- PART 1: FRACTAL ZOOM ---
+            const fractalTweens = {
+                zoom: { value: 1 },
+                depth: { value: fractalInitialDepth }
+            };
+
+            // Tween for scaling the whole group (zoom effect)
+            const zoomTween = new TWEEN.Tween(fractalTweens.zoom)
+                .to({ value: 15 }, 6000) // Zoom in by a factor of 15 over 6 seconds
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .onUpdate(() => {
+                    fractalGroup.scale.set(fractalTweens.zoom.value, fractalTweens.zoom.value, 1);
+                });
+
+            // Tween for dynamically increasing fractal complexity
+            const depthTween = new TWEEN.Tween(fractalTweens.depth)
+                .to({ value: 6 }, 6000) // Increase depth from 3 to 6
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .onUpdate(() => {
+                    fractalGroup.clear(); // Remove old grids
+                    createFractalGrid(new THREE.Vector3(0, 0, 0), fractalInitialSize, Math.floor(fractalTweens.depth.value), fractalGroup);
+                });
+
+            // --- PART 2 & 3: TRANSITION and HUDSPHERE EMERGENCE ---
+            zoomTween.onComplete(() => {
+                // Fade out the fractal group
+                new TWEEN.Tween(fractalGroup.position)
+                    .to({ z: -500 }, 1000) // Move it back to fade
+                    .easing(TWEEN.Easing.Quadratic.In)
+                    .onComplete(() => fractalGroup.visible = false)
+                    .start();
+                
+                // Make HudSphere visible and start its growth animation
+                hudSphereGroup.visible = true;
+                hudSphereGroup.rotation.y = Math.PI; // Start from a different angle
+                
+                // Growth tween
+                new TWEEN.Tween(hudSphereGroup.scale)
+                    .to({ x: 1, y: 1, z: 1 }, 2500) // Grow to full size
+                    .easing(TWEEN.Easing.Elastic.Out)
+                    .start();
+
+                // Rotation tween for a dynamic entrance
+                new TWEEN.Tween(hudSphereGroup.rotation)
+                    .to({ y: Math.PI * 2 }, 3000) // One full rotation
+                    .easing(TWEEN.Easing.Cubic.InOut)
+                    .onComplete(() => {
+                        // Allow restarting the animation
+                        startButton.disabled = false;
+                        resetFractal(); // Put fractal back for next run
+                    })
+                    .start();
+            });
+
+            // Start the first part of the animation chain
+            zoomTween.start();
+            depthTween.start();
+        }
+        
+        function resetFractal() {
+            fractalGroup.clear();
+            createFractalGrid(new THREE.Vector3(0, 0, 0), fractalInitialSize, fractalInitialDepth, fractalGroup);
+            fractalGroup.scale.set(1, 1, 1);
+            fractalGroup.position.z = 0;
+            fractalGroup.visible = true;
+        }
+
+        // --- INITIALIZATION ---
+        function init() {
+            // Create the initial objects
+            fractalGroup = new THREE.Group();
+            resetFractal(); // Creates the first fractal
+            scene.add(fractalGroup);
+            
+            createHudSphere();
+
+            // Setup listeners
+            startButton.addEventListener('click', startFullAnimationSequence);
+            window.addEventListener('resize', () => {
+                camera.left = -window.innerWidth / 2;
+                camera.right = window.innerWidth / 2;
+                camera.top = window.innerHeight / 2;
+                camera.bottom = -window.innerHeight / 2;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            animate();
+        }
+
+        // --- MAIN RENDER LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+            renderer.render(scene, camera);
+        }
+
+        init();
+
+    </script>
+</body>
+</html>

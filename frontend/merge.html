@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Wave & Fractal Study</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #111;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #animation-controls {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 10px; /* Reduced gap slightly */
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        #animation-controls h3 {
+            color: #ddd;
+            margin: 10px 0 5px 0;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #555;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #info-display {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+        }
+        
+        #phase-value {
+            background: rgba(0,0,0,0.6);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 16px;
+            color: #00ff88;
+            transition: font-size 0.3s ease-in-out, color 0.3s ease-in-out;
+        }
+
+        .control-button {
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+            text-align: center;
+        }
+        .control-button.primary { background-color: #008cff; color: white; }
+        .control-button.secondary { background-color: #00ff88; color: #111; }
+        .control-button.tertiary { background-color: #ffaa00; color: #111; }
+        .control-button.quaternary { background-color: #ff4444; color: white; }
+        .control-button.info { background-color: #cccccc; color: #111; font-size: 12px; padding: 6px 12px; }
+        .control-button:hover:not(:disabled) { filter: brightness(1.1); }
+        .control-button:disabled { background-color: #555; color: #999; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="animation-controls">
+        <h3>Wave Controls</h3>
+        <button id="translateButton" class="control-button primary">Translate</button>
+        <button id="rotateButton" class="control-button secondary">Animate Phase</button>
+        <button id="toggleHelixButton" class="control-button tertiary">Toggle 3D Helix</button>
+        <button id="toggle2DProjection" class="control-button tertiary">Toggle Projections</button>
+        
+        <h3>Fractal Controls</h3>
+        <button id="startFractalButton" class="control-button secondary">Start Fractal Zoom</button>
+        <button id="stopFractalButton" class="control-button tertiary">Stop/Reset Fractal</button>
+
+        <h3>Recording</h3>
+        <button id="startRecording" class="control-button quaternary">Start Recording</button>
+        <button id="stopRecording" class="control-button quaternary">Stop Recording</button>
+    </div>
+
+    <div id="info-display">
+        <button id="togglePhaseDisplayButton" class="control-button info">Toggle Info</button>
+        <div id="phase-value"></div>
+    </div>
+
+    <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.157.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/", "@tweenjs/tween.js": "https://unpkg.com/@tweenjs/tween.js@21.0.0/dist/tween.esm.js" } }</script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import TWEEN from '@tweenjs/tween.js';
+
+        // --- GLOBAL STATE & PARAMETERS ---
+        const waveParams = {
+            points: 1000, length: 20, amplitudeY: 3, frequencyY: 0.5,
+            amplitudeZ: 3, frequencyZ: 0.5, phaseZ: 0, rotation: 0
+        };
+        let waveGroup, isTranslating, isRotating;
+        let isHelixVisible = true;
+        let isProjectionVisible = true;
+
+        // --- HUD GLOBALS ---
+        let hudScene, hudCamera, hudSphereGroup, vectorLine, vectorPoint;
+        const hudSphereRadius = 150;
+
+        // --- FRACTAL GLOBALS ---
+        let fractalGroup, verticalLines = [], fractalTweenZoom, fractalTweenDepth;
+        const fractalInitialSize = 40;
+        const fractalInitialDepth = 2;
+        const fractalDivisions = 10;
+
+        // --- UI ELEMENT REFERENCES ---
+        const translateButton = document.getElementById('translateButton');
+        const rotateButton = document.getElementById('rotateButton');
+        const toggleHelixButton = document.getElementById('toggleHelixButton');
+        const togglePhaseDisplayButton = document.getElementById('togglePhaseDisplayButton');
+        const phaseValueElement = document.getElementById('phase-value');
+        const toggleProjectionsVisibilityButton = document.getElementById('toggle2DProjection');
+        const startRecordingButton = document.getElementById('startRecording');    
+        const stopRecordingButton = document.getElementById('stopRecording');
+        const startFractalButton = document.getElementById('startFractalButton');
+        const stopFractalButton = document.getElementById('stopFractalButton');
+
+        // 1. SCENE SETUP
+        const canvasContainer = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 8, 25);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer.autoClear = false;
+        canvasContainer.appendChild(renderer.domElement);
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(0, 2, 0); // Aim camera slightly up
+        const clock = new THREE.Clock();
+
+        // 2. HELPER FUNCTIONS & SYSTEM CREATION
+        
+        // --- WAVE SYSTEM ---
+        function createSineWaveGeometry(params) { const { points, length, amplitudeY, frequencyY, amplitudeZ, frequencyZ, phaseZ } = params; const positions = []; const step = length / points; for (let i = 0; i < points; i++) { const x = i * step - length / 2; const y = amplitudeY * Math.sin(x * frequencyY); const z = amplitudeZ * Math.sin(x * frequencyZ + phaseZ); positions.push(x, y, z); } const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); geometry.userData.params = params; return geometry; }
+        function createWaveSystem() { const group = new THREE.Group(); const mainWaveGeom = createSineWaveGeometry(waveParams); const sineWave = new THREE.Line(mainWaveGeom, new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 })); sineWave.name = 'mainWave'; const projectionXYGeom = new THREE.BufferGeometry(); projectionXYGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3)); const projectionXY = new THREE.Line(projectionXYGeom, new THREE.LineBasicMaterial({ color: 0xffff00 })); projectionXY.name = 'projectionXY'; const projectionXZGeom = new THREE.BufferGeometry(); projectionXZGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3)); const projectionXZ = new THREE.Line(projectionXZGeom, new THREE.LineBasicMaterial({ color: 0xff00ff })); projectionXZ.name = 'projectionXZ'; const gridSizeXZ = Math.max(waveParams.length, waveParams.amplitudeZ * 2); const gridSizeXY = Math.max(waveParams.length, waveParams.amplitudeY * 2); const gridDivisions = 10; const gridXZ = new THREE.GridHelper(gridSizeXZ, gridDivisions, 0x888888, 0x444444); const gridXY = new THREE.GridHelper(gridSizeXY, gridDivisions, 0x888888, 0x444444); gridXY.rotation.x = Math.PI / 2; const visiblePointsCount = 400, startPointIndex = 300; mainWaveGeom.setDrawRange(startPointIndex, visiblePointsCount); projectionXYGeom.setDrawRange(startPointIndex, visiblePointsCount); projectionXZGeom.setDrawRange(startPointIndex, visiblePointsCount); group.add(sineWave, projectionXY, projectionXZ, gridXZ, gridXY); return group; }
+
+        // --- HUD / BLOCH SPHERE SYSTEM ---
+        function createHud() { hudScene = new THREE.Scene(); hudCamera = new THREE.OrthographicCamera(-window.innerWidth / 2, window.innerWidth / 2, window.innerHeight / 2, -window.innerHeight / 2, 1, 1000); hudCamera.position.z = 500; hudSphereGroup = new THREE.Group(); const sphereGeom = new THREE.SphereGeometry(hudSphereRadius, 32, 16); const sphereMat = new THREE.MeshBasicMaterial({ color: 0x555555, wireframe: true, transparent: true, opacity: 0.5 }); hudSphereGroup.add(new THREE.Mesh(sphereGeom, sphereMat)); const planeGeom = new THREE.CircleGeometry(hudSphereRadius, 32); const planeMat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5, side: THREE.DoubleSide }); const planeXY = new THREE.Mesh(planeGeom, planeMat.clone()); const planeXZ = new THREE.Mesh(planeGeom, planeMat.clone()); planeXZ.rotation.x = Math.PI / 2; const planeYZ = new THREE.Mesh(planeGeom, planeMat.clone()); planeYZ.rotation.y = Math.PI / 2; hudSphereGroup.add(planeXY, planeXZ, planeYZ); const labelOffset = hudSphereRadius + 30; hudSphereGroup.add(createAxisLabel('|0⟩+i|1⟩', new THREE.Vector3(labelOffset, 0, 0)), createAxisLabel('|0⟩', new THREE.Vector3(0, labelOffset, 0)), createAxisLabel('|+⟩', new THREE.Vector3(0, 0, -labelOffset))); const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff }); vectorLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, hudSphereRadius)]), lineMat); hudSphereGroup.add(vectorLine); vectorPoint = new THREE.Mesh(new THREE.SphereGeometry(8, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00ffff })); hudSphereGroup.add(vectorPoint); hudSphereGroup.rotation.set(-Math.PI / 2, -Math.PI / 2, -Math.PI / 2); hudScene.add(hudSphereGroup); }
+        function createAxisLabel(text, position) { const canvas = document.createElement('canvas'); const context = canvas.getContext('2d'); const font = '48px Arial'; context.font = font; const textMetrics = context.measureText(text); canvas.width = textMetrics.width; canvas.height = 48; context.font = font; context.fillStyle = 'rgba(255, 255, 255, 1.0)'; context.fillText(text, 0, 40); const texture = new THREE.CanvasTexture(canvas); const spriteMaterial = new THREE.SpriteMaterial({ map: texture }); const sprite = new THREE.Sprite(spriteMaterial); sprite.scale.set(canvas.width, canvas.height, 1.0); sprite.position.copy(position); return sprite; }
+        
+        // --- FRACTAL SYSTEM ---
+        function createFractalSystem() {
+            fractalGroup = new THREE.Group();
+            resetFractal(); // Create the initial state
+            scene.add(fractalGroup);
+        }
+        function createFractalGridRecursive(position, size, depth) {
+            if (depth === 0) return;
+            // Create the horizontal grid on the XZ plane
+            const gridHelper = new THREE.GridHelper(size, fractalDivisions, 0xaaaaaa, 0x555555);
+            gridHelper.position.copy(position);
+            fractalGroup.add(gridHelper);
+
+            // Add vertical lines at the center of the grid cell
+            const lineMaterial = new THREE.LineBasicMaterial({ color: 0xcccccc });
+            const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(position.x, 0, position.z),
+                new THREE.Vector3(position.x, size / 2, position.z) // Line goes up
+            ]);
+            const verticalLine = new THREE.Line(lineGeometry, lineMaterial);
+            fractalGroup.add(verticalLine);
+            verticalLines.push(verticalLine);
+
+            const newSize = size / 2;
+            const newDepth = depth - 1;
+            const offsets = [-newSize/2, newSize/2];
+            for (let xOffset of offsets) {
+                for (let zOffset of offsets) {
+                    createFractalGridRecursive(new THREE.Vector3(position.x + xOffset, position.y, position.z + zOffset), newSize, newDepth);
+                }
+            }
+        }
+
+        // --- RECORDER SYSTEM ---
+        const canvas = renderer.domElement;
+        const stream = canvas.captureStream(60); 
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
+        const chunks = [];
+        recorder.ondataavailable = event => chunks.push(event.data);
+        recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'scene_animation.webm';
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            chunks.length = 0; // Clear chunks for next recording
+            startRecordingButton.disabled = false;
+            stopRecordingButton.disabled = true;
+        };
+        
+        // --- CONTROL FUNCTIONS ---
+        function setButtonsDisabled(disabled) { translateButton.disabled = disabled; rotateButton.disabled = disabled; }
+        function triggerTranslateAnimation() { if (isTranslating || isRotating) return; isTranslating = true; setButtonsDisabled(true); const targetX = waveGroup.position.x === -10 ? 100 : -10; new TWEEN.Tween(waveGroup.position).to({ x: targetX }, 2500).easing(TWEEN.Easing.Cubic.InOut).onComplete(() => { isTranslating = false; setButtonsDisabled(false); }).start(); }
+        function toggleHelixVisibility() { isHelixVisible = !isHelixVisible; if (waveGroup) { const helix = waveGroup.getObjectByName('mainWave'); if (helix) helix.visible = isHelixVisible; } }
+        function toggleProjectionsVisibility() { isProjectionVisible = !isProjectionVisible; if (waveGroup) { const projXY = waveGroup.getObjectByName('projectionXY');const projXZ = waveGroup.getObjectByName('projectionXZ'); if (projXY) projXY.visible = isProjectionVisible; if (projXZ) projXZ.visible = isProjectionVisible; } }
+        function togglePhaseDisplay() { phaseValueElement.style.display = phaseValueElement.style.display === 'none' ? 'block' : 'none'; }
+        
+        function triggerRotationAnimation() {
+            if (isTranslating || isRotating) return; isRotating = true; setButtonsDisabled(true);
+            const projectionXZ = waveGroup.getObjectByName('projectionXZ');
+            const phaseShift = new TWEEN.Tween(waveParams)
+                .to({ phaseZ: waveParams.phaseZ + 2 * Math.PI }, 5000)
+                .easing(TWEEN.Easing.Linear.None)
+                .onStart(() => { phaseValueElement.style.fontSize = '48px'; phaseValueElement.style.color = '#ffff00'; })
+                .onComplete(() => { phaseValueElement.style.fontSize = '16px'; phaseValueElement.style.color = '#00ff88'; isRotating = false; setButtonsDisabled(false); });
+            phaseShift.start();
+        }
+
+        function triggerFractalAnimation() {
+            stopFractalAnimation(); // Stop any previous animation first
+            startFractalButton.disabled = true;
+            stopFractalButton.disabled = false;
+
+            let zoomFactor = { value: 1 };
+            let depthFactor = { value: fractalInitialDepth };
+
+            fractalTweenZoom = new TWEEN.Tween(zoomFactor)
+                .to({ value: 10 }, 8000)
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .onUpdate(() => fractalGroup.scale.set(zoomFactor.value, zoomFactor.value, zoomFactor.value))
+                .onComplete(() => startFractalButton.disabled = false)
+                .start();
+
+            fractalTweenDepth = new TWEEN.Tween(depthFactor)
+                .to({ value: 5 }, 8000)
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .onUpdate(() => {
+                    fractalGroup.clear();
+                    verticalLines = [];
+                    createFractalGridRecursive(new THREE.Vector3(0, 0, 0), fractalInitialSize, Math.floor(depthFactor.value));
+                })
+                .start();
+        }
+
+        function stopFractalAnimation() {
+            if (fractalTweenZoom) fractalTweenZoom.stop();
+            if (fractalTweenDepth) fractalTweenDepth.stop();
+            resetFractal();
+            startFractalButton.disabled = false;
+            stopFractalButton.disabled = true;
+        }
+
+        function resetFractal() {
+            fractalGroup.clear();
+            verticalLines = [];
+            createFractalGridRecursive(new THREE.Vector3(0, 0, 0), fractalInitialSize, fractalInitialDepth);
+            fractalGroup.scale.set(1, 1, 1);
+            fractalGroup.position.set(0, -5, 0); // Place it below the wave system
+        }
+
+        function startRecording() { 
+            recorder.start(); 
+            console.log("Recording Started");
+            startRecordingButton.disabled = true;
+            stopRecordingButton.disabled = false;
+        }
+        function stopRecording() { 
+            recorder.stop(); 
+            console.log("Recording Stopped");
+        }
+
+        // 3. INITIALIZATION
+        function init() {
+            waveGroup = createWaveSystem();
+            scene.add(waveGroup);
+
+            createHud();
+            createFractalSystem();
+
+            // Setup listeners
+            translateButton.addEventListener('click', triggerTranslateAnimation);
+            rotateButton.addEventListener('click', triggerRotationAnimation);
+            toggleHelixButton.addEventListener('click', toggleHelixVisibility);
+            toggleProjectionsVisibilityButton.addEventListener('click', toggleProjectionsVisibility);
+            togglePhaseDisplayButton.addEventListener('click', togglePhaseDisplay);
+            startRecordingButton.addEventListener('click', startRecording);
+            stopRecordingButton.addEventListener('click', stopRecording);
+            startFractalButton.addEventListener('click', triggerFractalAnimation);
+            stopFractalButton.addEventListener('click', stopFractalAnimation);
+            
+            // Initial button states
+            stopRecordingButton.disabled = true;
+            stopFractalButton.disabled = true;
+
+            animate();
+        }
+
+        // 4. MAIN ANIMATION LOOP
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Handle window resizing
+            const { clientWidth, clientHeight } = canvasContainer; 
+            const canvas = renderer.domElement; 
+            const needResize = canvas.width !== clientWidth || canvas.height !== clientHeight; 
+            if (needResize) { 
+                renderer.setSize(clientWidth, clientHeight, false); 
+                camera.aspect = clientWidth / clientHeight; 
+                camera.updateProjectionMatrix(); 
+                hudCamera.left = -clientWidth / 2;
+                hudCamera.right = clientWidth / 2;
+                hudCamera.top = clientHeight / 2;
+                hudCamera.bottom = -clientHeight / 2;
+                hudCamera.updateProjectionMatrix();
+            }
+            
+            // Position HUD in bottom right
+            const margin = 60; 
+            hudSphereGroup.position.set(
+                clientWidth / 2 - hudSphereRadius - margin,
+                -clientHeight / 2 + hudSphereRadius + margin,
+                0
+            );
+
+            const elapsedTime = clock.getElapsedTime();
+            TWEEN.update();
+            controls.update();
+
+            // Update Wave
+            phaseValueElement.textContent = `phaseZ: ${waveParams.phaseZ.toFixed(3)}`;
+            const sineWave = waveGroup.getObjectByName('mainWave'); 
+            const projectionXY = waveGroup.getObjectByName('projectionXY'); 
+            const projectionXZ = waveGroup.getObjectByName('projectionXZ'); 
+            const params = sineWave.geometry.userData.params;
+            for (let i = 0; i < params.points; i++) { 
+                const i3 = i * 3; 
+                const x = (i * (params.length / params.points)) - params.length / 2; 
+                const y = params.amplitudeY * Math.sin(x * params.frequencyY + elapsedTime); 
+                const z = params.amplitudeZ * Math.sin(x * params.frequencyZ + params.phaseZ + elapsedTime); 
+                const mainPositions = sineWave.geometry.attributes.position.array; 
+                mainPositions[i3] = x; mainPositions[i3 + 1] = y; mainPositions[i3 + 2] = z; 
+                const xyPositions = projectionXY.geometry.attributes.position.array; 
+                xyPositions[i3] = x; xyPositions[i3 + 1] = y; xyPositions[i3 + 2] = -10; // Offset projection for clarity
+                const xzPositions = projectionXZ.geometry.attributes.position.array; 
+                xzPositions[i3] = x; xzPositions[i3 + 1] = -10; // Offset projection for clarity
+                xzPositions[i3 + 2] = z; 
+            }
+            sineWave.geometry.attributes.position.needsUpdate = true; 
+            projectionXY.geometry.attributes.position.needsUpdate = true; 
+            projectionXZ.geometry.attributes.position.needsUpdate = true;
+            
+            // Update HUD vector based on wave state
+            const polarAngle = Math.acos(Math.cos(waveParams.phaseZ)); // Example mapping
+            const azimuthalAngle = waveParams.phaseZ;
+            const endpoint = new THREE.Vector3().setFromSphericalCoords(hudSphereRadius, polarAngle, azimuthalAngle);
+            
+            vectorPoint.position.copy(endpoint);
+            const linePositions = vectorLine.geometry.attributes.position.array;
+            linePositions[3] = endpoint.x; linePositions[4] = endpoint.y; linePositions[5] = endpoint.z;
+            vectorLine.geometry.attributes.position.needsUpdate = true;
+            
+            // RENDER SCENE
+            renderer.clear();
+            renderer.render(scene, camera);
+            renderer.clearDepth(); // Clear depth buffer for HUD overlay
+            renderer.render(hudScene, hudCamera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
