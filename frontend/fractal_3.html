@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cartesian Journey to the Bloch Sphere</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        .ui-panel {
+            position: absolute;
+            background: rgba(20, 20, 20, 0.7);
+            backdrop-filter: blur(5px);
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 10;
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+        #startButton {
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 30px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #008cff;
+            color: white;
+            border: none;
+        }
+        #startButton:hover { background-color: #00aaff; }
+        #startButton.hidden { opacity: 0; pointer-events: none; }
+
+        #gate-controls {
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #gate-controls.visible { opacity: 1; pointer-events: all; }
+        #gate-controls h3 {
+            color: #ddd; margin: 0 0 5px 0; padding-bottom: 5px;
+            border-bottom: 1px solid #555; font-size: 14px;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .gate-button {
+            padding: 10px 15px; font-size: 16px; cursor: pointer;
+            border: 1px solid #008cff; border-radius: 5px;
+            background-color: transparent; color: #00aaff;
+            font-weight: bold; transition: all 0.2s ease;
+        }
+        .gate-button:hover { background-color: #008cff; color: white; }
+        
+        #narrative-text {
+            position: absolute;
+            bottom: 5%;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 22px;
+            text-shadow: 0 0 8px black;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            pointer-events: none;
+        }
+        #narrative-text.visible { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="narrative-text"></div>
+    
+    <button id="startButton" class="ui-panel">Begin Journey</button>
+    <div id="gate-controls" class="ui-panel">
+        <h3>Quantum Gates</h3>
+        <button class="gate-button" id="gate-h">Hadamard (H)</button>
+        <button class="gate-button" id="gate-x">Pauli-X (NOT)</button>
+        <button class="gate-button" id="gate-z">Pauli-Z (Z)</button>
+        <button class="gate-button" id="gate-reset">Reset to |0⟩</button>
+    </div>
+
+    <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.157.0/build/three.module.js", "@tweenjs/tween.js": "https://unpkg.com/@tweenjs/tween.js@21.0.0/dist/tween.esm.js" } }</script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import TWEEN from '@tweenjs/tween.js';
+
+        // --- REFERENCES & SETUP ---
+        const startButton = document.getElementById('startButton');
+        const gateControls = document.getElementById('gate-controls');
+        const narrativeText = document.getElementById('narrative-text');
+        
+        const scene = new THREE.Scene();
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // --- CAMERAS ---
+        const orthoCam = new THREE.OrthographicCamera(-window.innerWidth / 2, window.innerWidth / 2, window.innerHeight / 2, -window.innerHeight / 2, 1, 2000);
+        orthoCam.position.z = 1000;
+        const perspCam = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        let activeCamera = orthoCam; // Start with orthographic camera
+
+        // --- GLOBAL OBJECTS & STATE ---
+        let cartesianGroup, fractalGroup, blochSphereGroup, stateVector;
+        let isAnimatingGate = false;
+        const blochSphereRadius = 150;
+
+        // --- COMPONENT CREATION ---
+
+        function createScholarlyCartesianPlane() {
+            cartesianGroup = new THREE.Group();
+            const size = Math.max(window.innerWidth, window.innerHeight) * 2;
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x444444 });
+            // Axes
+            const pointsX = [new THREE.Vector3(-size/2, 0, 0), new THREE.Vector3(size/2, 0, 0)];
+            const pointsY = [new THREE.Vector3(0, -size/2, 0), new THREE.Vector3(0, size/2, 0)];
+            cartesianGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pointsX), lineMat));
+            cartesianGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pointsY), lineMat));
+            // Labels
+            const labelDist = 200;
+            cartesianGroup.add(createAxisLabel("Quadrant I (+, +)", new THREE.Vector3(labelDist, labelDist, 0)));
+            cartesianGroup.add(createAxisLabel("Quadrant II (-, +)", new THREE.Vector3(-labelDist, labelDist, 0)));
+            cartesianGroup.add(createAxisLabel("Quadrant III (-, -)", new THREE.Vector3(-labelDist, -labelDist, 0)));
+            cartesianGroup.add(createAxisLabel("Quadrant IV (+, -)", new THREE.Vector3(labelDist, -labelDist, 0)));
+            scene.add(cartesianGroup);
+        }
+
+        function createFractalGrid(position, size, depth, parentGroup) {
+            if (depth === 0) return;
+            const gridHelper = new THREE.GridHelper(size, 10, 0x555555, 0x222222);
+            gridHelper.position.copy(position);
+            gridHelper.rotation.x = Math.PI / 2;
+            parentGroup.add(gridHelper);
+            const newSize = size / 2;
+            const offset = size / 4;
+            createFractalGrid(new THREE.Vector3(position.x - offset, position.y + offset, 0), newSize, depth - 1, parentGroup);
+            createFractalGrid(new THREE.Vector3(position.x + offset, position.y + offset, 0), newSize, depth - 1, parentGroup);
+            createFractalGrid(new THREE.Vector3(position.x - offset, position.y - offset, 0), newSize, depth - 1, parentGroup);
+            createFractalGrid(new THREE.Vector3(position.x + offset, position.y - offset, 0), newSize, depth - 1, parentGroup);
+        }
+
+        function createBlochSphere() { /* ... unchanged from previous version ... */ blochSphereGroup = new THREE.Group(); const sphereGeom = new THREE.SphereGeometry(blochSphereRadius, 32, 32); const sphereMat = new THREE.MeshBasicMaterial({ color: 0xcccccc, wireframe: true, transparent: true, opacity: 0.2 }); blochSphereGroup.add(new THREE.Mesh(sphereGeom, sphereMat)); const axes = new THREE.AxesHelper(blochSphereRadius * 1.2); blochSphereGroup.add(axes); const labelOffset = blochSphereRadius + 20; blochSphereGroup.add(createAxisLabel("|0⟩", new THREE.Vector3(0, 0, labelOffset))); blochSphereGroup.add(createAxisLabel("|1⟩", new THREE.Vector3(0, 0, -labelOffset))); blochSphereGroup.add(createAxisLabel("|+⟩", new THREE.Vector3(labelOffset, 0, 0))); blochSphereGroup.add(createAxisLabel("|i⟩", new THREE.Vector3(0, labelOffset, 0))); const stateVectorPoint = new THREE.Mesh(new THREE.SphereGeometry(8, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00ffff })); const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 }); const lineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, blochSphereRadius)]); const line = new THREE.Line(lineGeom, lineMat); const stateGroup = new THREE.Group(); stateGroup.add(stateVectorPoint, line); stateVectorPoint.position.set(0, 0, blochSphereRadius); blochSphereGroup.add(stateGroup); stateVector = new THREE.Group(); stateVector.add(stateGroup); blochSphereGroup.add(stateVector); resetQubitState(0); blochSphereGroup.scale.setScalar(0.01); blochSphereGroup.visible = false; scene.add(blochSphereGroup); }
+        function createAxisLabel(text, position) { /* ... unchanged text helper ... */ const canvas = document.createElement('canvas'); const context = canvas.getContext('2d'); const fontSize = 40; const font = `bold ${fontSize}px Arial`; context.font = font; const textMetrics = context.measureText(text); canvas.width = textMetrics.width; canvas.height = fontSize * 1.2; context.font = font; context.fillStyle = 'rgba(255, 255, 255, 0.9)'; context.fillText(text, 0, fontSize); const texture = new THREE.CanvasTexture(canvas); const spriteMaterial = new THREE.SpriteMaterial({ map: texture }); const sprite = new THREE.Sprite(spriteMaterial); sprite.scale.set(canvas.width, canvas.height, 1.0); sprite.position.copy(position); return sprite; }
+        
+        // --- ANIMATION & GATE LOGIC ---
+        
+        function showNarrative(text, duration = 4000) {
+            return new Promise(resolve => {
+                narrativeText.textContent = text;
+                narrativeText.classList.add('visible');
+                setTimeout(() => {
+                    narrativeText.classList.remove('visible');
+                    setTimeout(resolve, 1000); // Wait for fade out
+                }, duration);
+            });
+        }
+
+        async function startFullAnimationSequence() {
+            startButton.classList.add('hidden');
+            
+            await showNarrative("We begin on a Cartesian Plane. A system of coordinates.", 3000);
+
+            // Zoom Animation
+            const zoomTween = new TWEEN.Tween(fractalGroup.scale)
+                .to({ x: 15, y: 15 }, 8000)
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .start();
+
+            await showNarrative("At its heart, a recursive pattern.", 3000);
+            await showNarrative("Each quadrant contains a copy of the whole...", 3000);
+            await showNarrative("...a principle of self-similarity, extending towards infinity.", 4000);
+            
+            // Wait for zoom to nearly finish
+            await new Promise(resolve => setTimeout(resolve, 1000)); 
+
+            // Fade out 2D elements
+            [...fractalGroup.children, ...cartesianGroup.children].forEach(child => {
+                 if (child.material) {
+                    child.material.transparent = true;
+                    new TWEEN.Tween(child.material).to({ opacity: 0 }, 1500).start();
+                }
+            });
+            
+            // Transition to 3D view
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+            activeCamera = perspCam; // *** THE CAMERA SWAP ***
+            perspCam.position.z = 800; // Start far away
+            
+            new TWEEN.Tween(perspCam.position).to({ z: 350 }, 2500)
+                .easing(TWEEN.Easing.Cubic.Out).start();
+            
+            blochSphereGroup.visible = true;
+            new TWEEN.Tween(blochSphereGroup.scale)
+                .to({ x: 1, y: 1, z: 1 }, 2500)
+                .easing(TWEEN.Easing.Elastic.Out)
+                .onComplete(() => gateControls.classList.add('visible'))
+                .start();
+        }
+
+        function applyGate(axis, angle) { /* ... gate logic unchanged ... */ if (isAnimatingGate) return; isAnimatingGate = true; const startQuaternion = stateVector.quaternion.clone(); const rotation = new THREE.Quaternion().setFromAxisAngle(axis, angle); const endQuaternion = startQuaternion.clone().multiply(rotation); new TWEEN.Tween().to({}, 1000).easing(TWEEN.Easing.Quadratic.InOut).onUpdate((_, elapsed) => stateVector.quaternion.slerpQuaternions(startQuaternion, endQuaternion, elapsed)).onComplete(() => { stateVector.quaternion.copy(endQuaternion); isAnimatingGate = false; }).start(); }
+        function resetQubitState(duration = 1000) { /* ... reset logic unchanged ... */ if (isAnimatingGate) return; isAnimatingGate = true; const startQuaternion = stateVector.quaternion.clone(); const endQuaternion = new THREE.Quaternion(); new TWEEN.Tween().to({}, duration).easing(TWEEN.Easing.Quadratic.InOut).onUpdate((_, elapsed) => stateVector.quaternion.slerpQuaternions(startQuaternion, endQuaternion, elapsed)).onComplete(() => { stateVector.quaternion.copy(endQuaternion); isAnimatingGate = false; }).start(); }
+
+        // --- INITIALIZATION ---
+        function init() {
+            createScholarlyCartesianPlane();
+            fractalGroup = new THREE.Group();
+            createFractalGrid(new THREE.Vector3(0, 0, 0), Math.min(window.innerWidth, window.innerHeight)*0.8, 4, fractalGroup);
+            scene.add(fractalGroup);
+            createBlochSphere();
+
+            startButton.addEventListener('click', startFullAnimationSequence);
+            document.getElementById('gate-h').addEventListener('click', () => applyGate(new THREE.Vector3(1, 0, 1).normalize(), Math.PI));
+            document.getElementById('gate-x').addEventListener('click', () => applyGate(new THREE.Vector3(1, 0, 0), Math.PI));
+            document.getElementById('gate-z').addEventListener('click', () => applyGate(new THREE.Vector3(0, 0, 1), Math.PI));
+            document.getElementById('gate-reset').addEventListener('click', () => resetQubitState());
+            
+            window.addEventListener('resize', () => {
+                const w = window.innerWidth; const h = window.innerHeight;
+                orthoCam.left = -w / 2; orthoCam.right = w / 2; orthoCam.top = h / 2; orthoCam.bottom = -h / 2;
+                orthoCam.updateProjectionMatrix();
+                perspCam.aspect = w / h;
+                perspCam.updateProjectionMatrix();
+                renderer.setSize(w, h);
+            });
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+            renderer.render(scene, activeCamera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

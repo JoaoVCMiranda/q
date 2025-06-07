@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Interactive Fractal Explorer</title>
+<title>Fractal Journey to HudSphere</title>
 <style>
 body {
 margin: 0;
@@ -16,47 +16,67 @@ width: 100vw;
 height: 100vh;
 display: block;
 }
-#animation-controls {
+#controls-container {
 position: absolute;
-left: 20px;
 top: 50%;
-transform: translateY(-50%);
+left: 50%;
+transform: translate(-50%, -50%);
 z-index: 10;
 display: flex;
 flex-direction: column;
-gap: 15px;
+align-items: center;
+gap: 20px;
 }
-.control-button {
-padding: 12px 20px;
-font-size: 16px;
+#startAnimationButton {
+padding: 15px 30px;
+font-size: 20px;
+font-weight: bold;
+cursor: pointer;
+background-color: #008cff;
+color: white;
+border: none;
+border-radius: 8px;
+transition: opacity 0.5s ease;
+}
+#startAnimationButton:hover:not(:disabled) {
+background-color: #00aaff;
+}
+#startAnimationButton:disabled {
+opacity: 0;
+cursor: not-allowed;
+}
+#recording-controls {
+position: absolute;
+top: 20px;
+left: 20px;
+z-index: 10;
+display: flex;
+gap: 10px;
+}
+.rec-button {
+padding: 8px 16px;
+font-size: 14px;
 cursor: pointer;
 border: none;
 border-radius: 5px;
+background-color: #f44336;
+color: white;
 font-weight: bold;
-transition: background-color 0.2s;
 }
-.control-button.primary { background-color: #008cff; color: white; }
-.control-button.secondary { background-color: #00ff88; color: #111; }
-.control-button.tertiary { background-color: #ffaa00; color: #111; }
-.control-button.info { background-color: #cccccc; color: #111; }
-.control-button.quaternary { background-color: #f44336; color: white; }
-.control-button:hover:not(:disabled) { filter: brightness(1.1); }
-.control-button:disabled { background-color: #555; color: #999; cursor: not-allowed; }
+.rec-button:hover {
+filter: brightness(1.1);
+}
 </style>
 </head>
 <body>
 <div id="canvas-container"></div>
-<div id="animation-controls">
-    <button id="zoomInButton" class="control-button primary">Zoom In</button>
-    <button id="zoomOutButton" class="control-button primary">Zoom Out</button>
-    <button id="increaseDepthButton" class="control-button secondary">Increase Depth</button>
-    <button id="decreaseDepthButton" class="control-button secondary">Decrease Depth</button>
-    <button id="toggleHudButton" class="control-button tertiary">Toggle HUD Sphere</button>
-    <button id="resetButton" class="control-button info">Reset View</button>
-    <button id="startRecordingButton" class="control-button quaternary">Start Recording</button>
-    <button id="stopRecordingButton" class="control-button quaternary">Stop Recording</button>
+<div id="controls-container">
+<button id="startAnimationButton">Begin Journey</button>
 </div>
-
+<div id="recording-controls">
+<button id="startRecordingButton" class="rec-button">Start Recording</button>
+<button id="stopRecordingButton" class="rec-button">Stop Recording</button>
+</div>
 <script type="importmap">
     {
         "imports": { 
@@ -72,15 +92,10 @@ transition: background-color 0.2s;
 
     // --- REFERENCES & SETUP ---
     const canvasContainer = document.getElementById('canvas-container');
-    const zoomInButton = document.getElementById('zoomInButton');
-    const zoomOutButton = document.getElementById('zoomOutButton');
-    const increaseDepthButton = document.getElementById('increaseDepthButton');
-    const decreaseDepthButton = document.getElementById('decreaseDepthButton');
-    const toggleHudButton = document.getElementById('toggleHudButton');
-    const resetButton = document.getElementById('resetButton');
+    const startButton = document.getElementById('startAnimationButton');
     const startRecordingButton = document.getElementById('startRecordingButton');
     const stopRecordingButton = document.getElementById('stopRecordingButton');
-
+    
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(
         -window.innerWidth / 2, window.innerWidth / 2, 
@@ -89,21 +104,19 @@ transition: background-color 0.2s;
     );
     camera.position.z = 1000;
     
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     canvasContainer.appendChild(renderer.domElement);
 
-    // --- GLOBAL OBJECTS & STATE ---
+    // --- GLOBAL OBJECTS ---
     let fractalGroup;
     let hudSphereGroup;
-    let currentDepth;
 
     const fractalInitialSize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
     const fractalDivisions = 10;
     const fractalInitialDepth = 3;
     const hudSphereRadius = 150;
-    const maxFractalDepth = 7;
-
+    
     // --- RECORDER SETUP ---
     const canvas = renderer.domElement;
     const stream = canvas.captureStream(60); 
@@ -116,26 +129,23 @@ transition: background-color 0.2s;
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'fractal_animation.webm';
+        a.download = 'fractal_journey.webm';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        chunks.length = 0; // Clear chunks for next recording
+        chunks.length = 0;
     };
-
+    
     function startRecording() { recorder.start(); console.log("Recording Started"); }
     function stopRecording() { recorder.stop(); console.log("Recording Stopped"); }
 
     // --- COMPONENT CREATION ---
-
     function createFractalGrid(position, size, depth, parentGroup) {
         if (depth === 0) return;
-
         const gridHelper = new THREE.GridHelper(size, fractalDivisions, 0x555555, 0x222222);
         gridHelper.position.copy(position);
         gridHelper.rotation.x = Math.PI / 2;
         parentGroup.add(gridHelper);
-
         if (depth > 1) {
             const newSize = size / 2;
             const newDepth = depth - 1;
@@ -149,11 +159,9 @@ transition: background-color 0.2s;
     
     function createHudSphere() {
         hudSphereGroup = new THREE.Group();
-        
         const sphereGeom = new THREE.SphereGeometry(hudSphereRadius, 32, 16);
-        const sphereMat = new THREE.MeshBasicMaterial({ color: 0xcccccc, wireframe: true, transparent: true, opacity: 0.5 });
+        const sphereMat = new THREE.MeshBasicMaterial({ color: 0xcccccc, wireframe: true, transparent: true, opacity: 0.8 });
         hudSphereGroup.add(new THREE.Mesh(sphereGeom, sphereMat));
-
         const planeGeom = new THREE.CircleGeometry(hudSphereRadius, 32);
         const planeMat = new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
         const planeXY = new THREE.Mesh(planeGeom, planeMat.clone());
@@ -162,12 +170,14 @@ transition: background-color 0.2s;
         const planeYZ = new THREE.Mesh(planeGeom, planeMat.clone());
         planeYZ.rotation.y = Math.PI / 2;
         hudSphereGroup.add(planeXY, planeXZ, planeYZ);
-
         const labelOffset = hudSphereRadius + 30;
         hudSphereGroup.add(createAxisLabel('|0⟩', new THREE.Vector3(0, labelOffset, 0)));
         hudSphereGroup.add(createAxisLabel('|1⟩', new THREE.Vector3(0, -labelOffset, 0)));
         hudSphereGroup.add(createAxisLabel('|+⟩', new THREE.Vector3(labelOffset, 0, 0)));
-
+        
+        // Set initial state: centered, tiny, and invisible
+        hudSphereGroup.position.set(0, 0, 0);
+        hudSphereGroup.scale.set(0.01, 0.01, 0.01);
         hudSphereGroup.visible = false;
         scene.add(hudSphereGroup);
     }
@@ -184,7 +194,6 @@ transition: background-color 0.2s;
         context.font = font;
         context.fillStyle = 'rgba(255, 255, 255, 0.9)';
         context.fillText(text, 0, fontSize);
-        
         const texture = new THREE.CanvasTexture(canvas);
         const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
         const sprite = new THREE.Sprite(spriteMaterial);
@@ -193,43 +202,86 @@ transition: background-color 0.2s;
         return sprite;
     }
 
-    // --- INTERACTIVE FUNCTIONS ---
+    // --- ANIMATION LOGIC ---
 
-    function zoom(factor) {
-        const currentScale = fractalGroup.scale.x;
-        new TWEEN.Tween(fractalGroup.scale)
-            .to({ x: currentScale * factor, y: currentScale * factor, z: 1 }, 750)
-            .easing(TWEEN.Easing.Quadratic.Out)
-            .start();
-    }
+    function startFullAnimationSequence() {
+        startButton.disabled = true;
 
-    function changeDepth(delta) {
-        const newDepth = THREE.MathUtils.clamp(currentDepth + delta, 1, maxFractalDepth);
-        if (newDepth !== currentDepth) {
-            currentDepth = newDepth;
-            fractalGroup.clear();
-            createFractalGrid(new THREE.Vector3(0, 0, 0), fractalInitialSize, currentDepth, fractalGroup);
-        }
-    }
+        // --- PART 1: FRACTAL ZOOM ---
+        const animationParams = { depth: fractalInitialDepth };
+        
+        const zoomTween = new TWEEN.Tween(fractalGroup.scale)
+            .to({ x: 15, y: 15 }, 7000)
+            .easing(TWEEN.Easing.Quadratic.InOut);
 
-    function toggleHud() {
-        hudSphereGroup.visible = !hudSphereGroup.visible;
+        const depthTween = new TWEEN.Tween(animationParams)
+            .to({ depth: 6 }, 7000)
+            .easing(TWEEN.Easing.Quadratic.InOut)
+            .onUpdate(() => {
+                fractalGroup.clear();
+                createFractalGrid(new THREE.Vector3(0, 0, 0), fractalInitialSize, Math.floor(animationParams.depth), fractalGroup);
+            });
+
+        // --- PART 2: HUD SPHERE EMERGENCE ---
+        zoomTween.onComplete(() => {
+            hudSphereGroup.visible = true;
+            
+            // Animate sphere popping into view
+            const hudAppearTween = new TWEEN.Tween(hudSphereGroup.scale)
+                .to({ x: 1, y: 1, z: 1 }, 1500)
+                .easing(TWEEN.Easing.Elastic.Out)
+                .delay(500); // Pause for a moment before it appears
+
+            // --- PART 3: FRACTAL FADE & HUD RELOCATION ---
+            hudAppearTween.onComplete(() => {
+                // Fade out fractal by moving it away
+                new TWEEN.Tween(fractalGroup.position)
+                    .to({ z: -1000 }, 2000)
+                    .easing(TWEEN.Easing.Quadratic.In)
+                    .onComplete(() =>new TWEEN.Tween(fractalGroup.opacity)
+                        .to({ value: 0 }, 1000)
+                        .easing(TWEEN.Easing.Quadratic.In)
+                        .start())
+                    .start();
+
+                // Calculate final HUD position (dynamic based on window size)
+                const margin = 60;
+                const targetX = window.innerWidth / 2 - hudSphereRadius - margin;
+                const targetY = -window.innerHeight / 2 + hudSphereRadius + margin;
+
+                // Move HUD to the corner
+                new TWEEN.Tween(hudSphereGroup.position)
+                    .to({ x: targetX, y: targetY, z: 0 }, 2500)
+                    .easing(TWEEN.Easing.Cubic.InOut)
+                    .delay(1000) // Hold the central view before moving
+                    .onComplete(() => {
+                        // Animation finished, allow restart
+                        startButton.disabled = false;
+                        wait(2000);
+                        resetScene();
+                    })
+                    .start();
+            });
+            
+            hudAppearTween.start();
+        });
+
+        zoomTween.start();
+        depthTween.start();
     }
     
-    function resetView() {
+    function resetScene() {
+        // Reset fractal
         fractalGroup.clear();
-        currentDepth = fractalInitialDepth;
-        createFractalGrid(new THREE.Vector3(0, 0, 0), fractalInitialSize, currentDepth, fractalGroup);
+        createFractalGrid(new THREE.Vector3(0, 0, 0), fractalInitialSize, fractalInitialDepth, fractalGroup);
+        fractalGroup.scale.set(1, 1, 1);
+        fractalGroup.position.set(0, 0, 0);
+        fractalGroup.visible = true;
         
-        new TWEEN.Tween(fractalGroup.scale)
-            .to({ x: 1, y: 1, z: 1 }, 750)
-            .easing(TWEEN.Easing.Quadratic.Out)
-            .start();
-        
-        new TWEEN.Tween(fractalGroup.position)
-            .to({ x: 0, y: 0, z: 0 }, 750)
-            .easing(TWEEN.Easing.Quadratic.Out)
-            .start();
+        // Reset HUD Sphere
+        hudSphereGroup.position.set(0, 0, 0);
+        hudSphereGroup.scale.set(0.01, 0.01, 0.01);
+        hudSphereGroup.visible = false;
     }
 
     // --- INITIALIZATION ---
@@ -237,19 +289,13 @@ transition: background-color 0.2s;
         fractalGroup = new THREE.Group();
         scene.add(fractalGroup);
         
-        resetView();
         createHudSphere();
+        resetScene(); // Set initial state for all objects
 
-        // Setup listeners
-        zoomInButton.addEventListener('click', () => zoom(2));
-        zoomOutButton.addEventListener('click', () => zoom(0.5));
-        increaseDepthButton.addEventListener('click', () => changeDepth(1));
-        decreaseDepthButton.addEventListener('click', () => changeDepth(-1));
-        toggleHudButton.addEventListener('click', toggleHud);
-        resetButton.addEventListener('click', resetView);
+        startButton.addEventListener('click', startFullAnimationSequence);
         startRecordingButton.addEventListener('click', startRecording);
         stopRecordingButton.addEventListener('click', stopRecording);
-
+        
         window.addEventListener('resize', () => {
             camera.left = -window.innerWidth / 2;
             camera.right = window.innerWidth / 2;
@@ -262,23 +308,9 @@ transition: background-color 0.2s;
         animate();
     }
 
-    // --- MAIN RENDER LOOP ---
     function animate() {
         requestAnimationFrame(animate);
         TWEEN.update();
-
-        // Position HUD in the bottom-right corner
-        if (hudSphereGroup && hudSphereGroup.visible) {
-            const margin = 60;
-            const clientWidth = renderer.domElement.clientWidth;
-            const clientHeight = renderer.domElement.clientHeight;
-            hudSphereGroup.position.set(
-                clientWidth / 2 - hudSphereRadius - margin,
-                -clientHeight / 2 + hudSphereRadius + margin,
-                0
-            );
-        }
-
         renderer.render(scene, camera);
     }
 
