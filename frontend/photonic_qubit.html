@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Wave Study of Photonic Qubit with Three.js</title>
+    <title>Three.js Interactive Wave Study</title>
     <style>
         body {
             margin: 0;
@@ -21,15 +20,32 @@
             height: 100%;
         }
 
-        /* --- MODIFIED: Control Panel Structure & Toggling --- */
+        /* --- UI Visibility Toggling --- */
+        .ui-element {
+            transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+        }
+        
+        body.ui-hidden .ui-element {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(20px);
+        }
+        
+        body.ui-hidden #controls-container.is-vertical {
+            transform: translateY(-50%) translateX(-20px);
+        }
+
         #controls-container {
             position: absolute;
             left: 0;
             top: 50%;
-            transform: translateY(-50%);
             z-index: 10;
             display: flex;
             align-items: flex-start;
+        }
+        
+        #controls-container.is-vertical {
+             transform: translateY(-50%);
         }
 
         #toggleControlsButton {
@@ -38,7 +54,7 @@
             padding: 15px 8px;
             border-top-left-radius: 0;
             border-bottom-left-radius: 0;
-            z-index: 11; /* Above the panel */
+            z-index: 11;
         }
         
         #animation-controls {
@@ -49,12 +65,11 @@
             padding: 20px;
             border-radius: 0 8px 8px 0;
             backdrop-filter: blur(5px);
-            transition: transform 0.4s ease-in-out;
             transform: translateX(-100%); /* Hidden by default */
         }
 
         #animation-controls.is-open {
-            transform: translateX(0); /* Visible state */
+            transform: translateX(0);
         }
 
         .control-section {
@@ -64,19 +79,8 @@
             padding-bottom: 10px;
             border-bottom: 1px solid #444;
         }
-        .control-section:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
-        }
-
-        .control-section h4 {
-            color: #ccc;
-            margin: 0 0 5px 0;
-            font-weight: normal;
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
+        .control-section:last-child { border-bottom: none; padding-bottom: 0; }
+        .control-section h4 { color: #ccc; margin: 0 0 5px 0; font-weight: normal; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
 
         #info-display {
             position: absolute;
@@ -85,7 +89,7 @@
             z-index: 10;
             display: flex;
             flex-direction: column;
-            align-items: flex-end; /* Right-align content */
+            align-items: flex-end;
             gap: 10px;
         }
         
@@ -99,17 +103,7 @@
             transition: font-size 0.3s ease-in-out, color 0.3s ease-in-out;
         }
 
-        .control-button {
-            padding: 12px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            border: none;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: background-color 0.2s;
-            width: 100%;
-            box-sizing: border-box;
-        }
+        .control-button { padding: 12px 20px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; transition: background-color 0.2s; width: 100%; box-sizing: border-box; }
         .control-button.primary { background-color: #008cff; color: white; }
         .control-button.secondary { background-color: #00ff88; color: #111; }
         .control-button.tertiary { background-color: #ffaa00; color: #111; }
@@ -117,73 +111,25 @@
         .control-button:hover:not(:disabled) { filter: brightness(1.1); }
         .control-button:disabled { background-color: #555; color: #999; cursor: not-allowed; }
 
-        /* --- NEW: Responsive Styles for Mobile --- */
         @media (max-width: 768px) {
-            #controls-container {
-                top: auto;
-                bottom: 0;
-                left: 0;
-                width: 100%;
-                transform: none;
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            #toggleControlsButton {
-                writing-mode: horizontal-tb;
-                border-radius: 8px 8px 0 0;
-            }
-
-            #animation-controls {
-                width: 100%;
-                border-radius: 0;
-                flex-direction: row;
-                flex-wrap: wrap;
-                justify-content: space-around;
-                gap: 5px;
-                padding: 10px;
-                transform: translateY(100%); /* Hide below screen */
-            }
-
-            #animation-controls.is-open {
-                transform: translateY(0);
-            }
-
-            .control-section {
-                flex: 1 1 120px;
-                border: none;
-                padding-bottom: 0;
-            }
-            
-            .control-section h4 {
-                text-align: center;
-            }
-
-            .control-button {
-                padding: 8px 10px;
-                font-size: 13px;
-            }
-
-            #info-display {
-                right: auto;
-                left: 10px;
-                top: 10px;
-                align-items: flex-start;
-            }
-
-            #phase-value {
-                font-size: 14px;
-            }
+            #controls-container { top: auto; bottom: 0; left: 0; width: 100%; transform: none; flex-direction: column; align-items: stretch; }
+            #toggleControlsButton { writing-mode: horizontal-tb; border-radius: 8px 8px 0 0; }
+            #animation-controls { width: 100%; border-radius: 0; flex-direction: row; flex-wrap: wrap; justify-content: space-around; gap: 5px; padding: 10px; transform: translateY(100%); }
+            #animation-controls.is-open { transform: translateY(0); }
+            .control-section { flex: 1 1 120px; border: none; padding-bottom: 0; }
+            .control-section h4 { text-align: center; }
+            .control-button { padding: 8px 10px; font-size: 13px; }
+            #info-display { right: auto; left: 10px; top: 10px; align-items: flex-start; }
+            #phase-value { font-size: 14px; }
         }
     </style>
 </head>
 <body>
     <div id="canvas-container"></div>
 
-    <!-- MODIFIED: Restructured control panel -->
-    <div id="controls-container">
+    <div id="controls-container" class="ui-element is-vertical">
         <button id="toggleControlsButton" class="control-button info">☰ Controls</button>
-        <div id="animation-controls" class="is-open">
+        <div id="animation-controls">
             <div class="control-section">
                 <h4>Animation</h4>
                 <button id="translateButton" class="control-button primary">Translate</button>
@@ -191,27 +137,28 @@
             </div>
             <div class="control-section">
                 <h4>State Control</h4>
-                <button id="sendZ0" class="control-button primary">Z0</button>
-                <button id="sendZ1" class="control-button primary">Z1</button>
-                <button id="sendX0" class="control-button primary">X0</button>
-                <button id="sendX1" class="control-button primary">X1</button>
+                <button id="sendZ0" class="control-button primary">|0⟩</button>
+                <button id="sendZ1" class="control-button primary">|1⟩</button>
+                <button id="sendX0" class="control-button primary">|+⟩</button>
+                <button id="sendX1" class="control-button primary">|-⟩</button>
             </div>
             <div class="control-section">
                 <h4>View Options</h4>
                 <button id="toggleHelixButton" class="control-button tertiary">Toggle 3D Helix</button>
-                <button id="toggle2DProjection" class="control-button quaternary">Toggle 2D Projection</button>
+                <button id="toggle2DProjection" class="control-button tertiary">Toggle 2D Projection</button>
+                <button id="toggleHudButton" class="control-button tertiary">Toggle HUD</button>
             </div>
             <div class="control-section">
                 <h4>Tools</h4>
-                <button id="getCamera" class="control-button secondary">getCamera</button>
+                <button id="getCamera" class="control-button secondary">Log Camera</button>
                 <button id="startRecording" class="control-button quaternary">Start Recording</button>
                 <button id="stopRecording" class="control-button quaternary">Stop Recording</button>
             </div>
         </div>
     </div>
 
-
-    <div id="info-display">
+    <div id="info-display" class="ui-element">
+        <button id="toggleUIVisibility" class="control-button info">Toggle UI</button>
         <button id="togglePhaseDisplayButton" class="control-button info">Toggle Info</button>
         <div id="phase-value"></div>
     </div>
@@ -230,18 +177,21 @@
         let waveGroup, isTranslating, isRotating;
         let isHelixVisible = true;
         let isProjectionVisible = true;
+        let isHudVisible = true;
 
         // --- HUD GLOBALS ---
         let hudScene, hudCamera, hudSphereGroup, vectorLine, vectorPoint;
-        const hudSphereRadius = 150;
-
+        const baseHudRadius = 150; // Base size for calculation
 
         // Get references to all UI elements
         const toggleControlsButton = document.getElementById('toggleControlsButton');
+        const controlsContainer = document.getElementById('controls-container');
         const animationControlsPanel = document.getElementById('animation-controls');
         const translateButton = document.getElementById('translateButton');
         const rotateButton = document.getElementById('rotateButton');
         const toggleHelixButton = document.getElementById('toggleHelixButton');
+        const toggleHudButton = document.getElementById('toggleHudButton');
+        const toggleUIVisibilityButton = document.getElementById('toggleUIVisibility');
         const togglePhaseDisplayButton = document.getElementById('togglePhaseDisplayButton');
         const phaseValueElement = document.getElementById('phase-value');
         const toggleProjectionsVisibilityButton = document.getElementById('toggle2DProjection');
@@ -260,7 +210,7 @@
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 8, 25);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // alpha for hud transparency
         renderer.autoClear = false;
         canvasContainer.appendChild(renderer.domElement);
         const controls = new OrbitControls(camera, renderer.domElement);
@@ -270,215 +220,93 @@
         // 2. HELPER FUNCTIONS
         function createSineWaveGeometry(params) { const { points, length, amplitudeY, frequencyY, amplitudeZ, frequencyZ, phaseZ } = params; const positions = []; const step = length / points; for (let i = 0; i < points; i++) { const x = i * step - length / 2; const y = amplitudeY * Math.sin(x * frequencyY); const z = amplitudeZ * Math.sin(x * frequencyZ + phaseZ); positions.push(x, y, z); } const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); geometry.userData.params = params; return geometry; }
         function createWaveSystem() { const group = new THREE.Group(); const mainWaveGeom = createSineWaveGeometry(waveParams); const sineWave = new THREE.Line(mainWaveGeom, new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 })); sineWave.name = 'mainWave'; const projectionXYGeom = new THREE.BufferGeometry(); projectionXYGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3)); const projectionXY = new THREE.Line(projectionXYGeom, new THREE.LineBasicMaterial({ color: 0xffff00 })); projectionXY.name = 'projectionXY'; const projectionXZGeom = new THREE.BufferGeometry(); projectionXZGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(waveParams.points * 3), 3)); const projectionXZ = new THREE.Line(projectionXZGeom, new THREE.LineBasicMaterial({ color: 0xff00ff })); projectionXZ.name = 'projectionXZ'; const gridSizeXZ = Math.max(waveParams.length, waveParams.amplitudeZ * 2); const gridSizeXY = Math.max(waveParams.length, waveParams.amplitudeY * 2); const gridDivisions = 10; const gridXZ = new THREE.GridHelper(gridSizeXZ, gridDivisions, 0x888888, 0x444444); const gridXY = new THREE.GridHelper(gridSizeXY, gridDivisions, 0x888888, 0x444444); gridXY.rotation.x = Math.PI / 2; const visiblePointsCount = 400, startPointIndex = 300; mainWaveGeom.setDrawRange(startPointIndex, visiblePointsCount); projectionXYGeom.setDrawRange(startPointIndex, visiblePointsCount); projectionXZGeom.setDrawRange(startPointIndex, visiblePointsCount); group.add(sineWave, projectionXY, projectionXZ, gridXZ, gridXY); return group; }
-        // RECORDER SETUP
-        const canvas = renderer.domElement;
-        const stream = canvas.captureStream(60); 
-        const recorder = new MediaRecorder(stream);
-        const chunks = [];
-
-        recorder.ondataavailable = event => chunks.push(event.data);
-        recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'video/webm' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'fractal_animation.webm';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-        };
-
-        function createAxisLabel(text, position) {
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            const font = '48px Arial';
-            context.font = font;
-            const textMetrics = context.measureText(text);
-            canvas.width = textMetrics.width;
-            canvas.height = 48; 
-            context.font = font;
-            context.fillStyle = 'rgba(255, 255, 255, 1.0)';
-            context.fillText(text, 0, 40);
-
-            const texture = new THREE.CanvasTexture(canvas);
-            const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
-            const sprite = new THREE.Sprite(spriteMaterial);
-            sprite.scale.set(canvas.width, canvas.height, 1.0); // Scale up for better visibility
-            sprite.position.copy(position);
-            return sprite;
-        }
-
-        function createHud() {
-            hudScene = new THREE.Scene();
-            hudCamera = new THREE.OrthographicCamera(-window.innerWidth / 2, window.innerWidth / 2, window.innerHeight / 2, -window.innerHeight / 2, 1, 1000);
-            hudCamera.position.z = 500;
-
-            hudSphereGroup = new THREE.Group();
-
-            const sphereGeom = new THREE.SphereGeometry(hudSphereRadius, 32, 16);
-            const sphereMat = new THREE.MeshBasicMaterial({ color: 0x555555, wireframe: true, transparent: true, opacity: 0.5 });
-            const sphereMesh = new THREE.Mesh(sphereGeom, sphereMat);
-            hudSphereGroup.add(sphereMesh);
-
-            const planeGeom = new THREE.CircleGeometry(hudSphereRadius, 32);
-            const planeMatXY = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
-            const planeMatXZ = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
-            const planeMatYZ = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
-            
-            const planeXY = new THREE.Mesh(planeGeom, planeMatXY);
-            const planeXZ = new THREE.Mesh(planeGeom, planeMatXZ);
-            planeXZ.rotation.x = Math.PI / 2;
-            const planeYZ = new THREE.Mesh(planeGeom, planeMatYZ);
-            planeYZ.rotation.y = Math.PI / 2;
-            hudSphereGroup.add(planeXY, planeXZ, planeYZ);
-
-            const labelOffset = hudSphereRadius + 30;
-            const labelX = createAxisLabel('|0⟩+i|1⟩', new THREE.Vector3(labelOffset, 0, 0));
-            const labelY = createAxisLabel('|0⟩', new THREE.Vector3(0, labelOffset, 0));
-            const labelZ = createAxisLabel('|+⟩', new THREE.Vector3(0, 0, -labelOffset));
-            hudSphereGroup.add(labelX, labelY, labelZ);
-
-            const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-            const linePoints = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, hudSphereRadius)];
-            const lineGeom = new THREE.BufferGeometry().setFromPoints(linePoints);
-            vectorLine = new THREE.Line(lineGeom, lineMat);
-            hudSphereGroup.add(vectorLine);
-
-            const pointGeom = new THREE.SphereGeometry(8, 16, 16);
-            const pointMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
-            vectorPoint = new THREE.Mesh(pointGeom, pointMat);
-            hudSphereGroup.add(vectorPoint);
-
-            hudSphereGroup.rotation.x = - Math.PI /2 ;
-            hudSphereGroup.rotation.y = - Math.PI /2 ;
-            hudSphereGroup.rotation.z = - Math.PI /2 ;
-
-            hudScene.add(hudSphereGroup);
-        }
-
+        const canvas = renderer.domElement; const stream = canvas.captureStream(60); const recorder = new MediaRecorder(stream); const chunks = []; recorder.ondataavailable = event => chunks.push(event.data); recorder.onstop = () => { const blob = new Blob(chunks, { type: 'video/webm' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'wave_animation.webm'; document.body.appendChild(a); a.click(); document.body.removeChild(a); };
+        function createAxisLabel(text, position) { const canvas = document.createElement('canvas'); const context = canvas.getContext('2d'); const font = '48px Arial'; context.font = font; const textMetrics = context.measureText(text); canvas.width = textMetrics.width; canvas.height = 48; context.font = font; context.fillStyle = 'rgba(255, 255, 255, 1.0)'; context.fillText(text, 0, 40); const texture = new THREE.CanvasTexture(canvas); const spriteMaterial = new THREE.SpriteMaterial({ map: texture }); const sprite = new THREE.Sprite(spriteMaterial); sprite.scale.set(canvas.width, canvas.height, 1.0); sprite.position.copy(position); return sprite; }
+        function createHud() { hudScene = new THREE.Scene(); hudCamera = new THREE.OrthographicCamera(-window.innerWidth / 2, window.innerWidth / 2, window.innerHeight / 2, -window.innerHeight / 2, 1, 1000); hudCamera.position.z = 500; hudSphereGroup = new THREE.Group(); const sphereGeom = new THREE.SphereGeometry(baseHudRadius, 32, 16); const sphereMat = new THREE.MeshBasicMaterial({ color: 0x555555, wireframe: true, transparent: true, opacity: 0.5 }); hudSphereGroup.add(new THREE.Mesh(sphereGeom, sphereMat)); const planeGeom = new THREE.CircleGeometry(baseHudRadius, 32); const planeMat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5, side: THREE.DoubleSide }); const planeXY = new THREE.Mesh(planeGeom, planeMat.clone()); const planeXZ = new THREE.Mesh(planeGeom, planeMat.clone()); planeXZ.rotation.x = Math.PI / 2; const planeYZ = new THREE.Mesh(planeGeom, planeMat.clone()); planeYZ.rotation.y = Math.PI / 2; hudSphereGroup.add(planeXY, planeXZ, planeYZ); const labelOffset = baseHudRadius + 30; const labelX = createAxisLabel('|+⟩+i|-⟩', new THREE.Vector3(labelOffset, 0, 0)); const labelY = createAxisLabel('|0⟩', new THREE.Vector3(0, labelOffset, 0)); const labelZ = createAxisLabel('|+⟩', new THREE.Vector3(0, 0, -labelOffset)); hudSphereGroup.add(labelX, labelY, labelZ); const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff }); const lineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, baseHudRadius)]); vectorLine = new THREE.Line(lineGeom, lineMat); hudSphereGroup.add(vectorLine); const pointGeom = new THREE.SphereGeometry(8, 16, 16); const pointMat = new THREE.MeshBasicMaterial({ color: 0x00ffff }); vectorPoint = new THREE.Mesh(pointGeom, pointMat); hudSphereGroup.add(vectorPoint); hudSphereGroup.rotation.set(-Math.PI / 2, -Math.PI / 2, -Math.PI / 2); hudScene.add(hudSphereGroup); }
         function setButtonsDisabled(disabled) { translateButton.disabled = disabled; rotateButton.disabled = disabled; }
         function triggerTranslateAnimation() { if (isTranslating || isRotating) return; isTranslating = true; setButtonsDisabled(true); const targetX = waveGroup.position.x === -10 ? 100 : -10; new TWEEN.Tween(waveGroup.position).to({ x: targetX }, 2500).easing(TWEEN.Easing.Cubic.InOut).onComplete(() => { isTranslating = false; setButtonsDisabled(false); }).start(); }
         function toggleHelixVisibility() { isHelixVisible = !isHelixVisible; if (waveGroup) { const helix = waveGroup.getObjectByName('mainWave'); if (helix) helix.visible = isHelixVisible; } }
+        function toggleHudVisibility() { isHudVisible = !isHudVisible; }
+        function toggleUIVisibility() { document.body.classList.toggle('ui-hidden'); isHudVisible = !document.body.classList.contains('ui-hidden'); }
         function toggleProjectionsVisibility() { isProjectionVisible = !isProjectionVisible; if (waveGroup) { const projXY = waveGroup.getObjectByName('projectionXY');const projXZ = waveGroup.getObjectByName('projectionXZ'); if (projXY) projXY.visible = isProjectionVisible; if (projXZ) projXZ.visible = isProjectionVisible; } }
         function togglePhaseDisplay() { phaseValueElement.style.display = phaseValueElement.style.display === 'none' ? 'block' : 'none'; }
         function startRecording() { recorder.start(); console.log("Recording Started");}
         function stopRecording() { recorder.stop(); console.log("Recording Stopped"); }
-
         function sendZ0(){new TWEEN.Tween(waveGroup.rotation).to({x : 0}).easing(TWEEN.Easing.Cubic.InOut).start();};
-        function sendZ1(){new TWEEN.Tween(waveGroup.rotation).to({x : Math.PI/2}).easing(TWEEN.Easing.Cubic.InOut).start();};
-        function sendX0(){new TWEEN.Tween(waveGroup.rotation).to({x : -Math.PI/4}).easing(TWEEN.Easing.Cubic.InOut).start();};
-        function sendX1(){new TWEEN.Tween(waveGroup.rotation).to({x : Math.PI/4}).easing(TWEEN.Easing.Cubic.InOut).start();};
-
-        function getCamera() { console.log(camera); console.log(controls); }
-
-        function triggerRotationAnimation() {
-            if (isTranslating || isRotating) return;
-            isRotating = true;
-            setButtonsDisabled(true);
-            const projectionXZ = waveGroup.getObjectByName('projectionXZ');
-            if (!projectionXZ) { console.error("XZ projection not found!"); isRotating = false; setButtonsDisabled(false); return; }
-            const rotateUp = new TWEEN.Tween(projectionXZ.rotation).to({ x: Math.PI / 2 }, 1500).easing(TWEEN.Easing.Cubic.InOut);
-            const phaseShift = new TWEEN.Tween(waveParams).to({ phaseZ: 2* Math.PI }, 5000).easing(TWEEN.Easing.Cubic.InOut).yoyo(true).repeat(1)
-                .onStart(() => { phaseValueElement.style.fontSize = '48px'; phaseValueElement.style.color = '#ffff00'; })
-                .onComplete(() => { phaseValueElement.style.fontSize = '16px'; phaseValueElement.style.color = '#00ff88'; });
-            const rotateDown = new TWEEN.Tween(projectionXZ.rotation).to({ x: 0 }, 1500).easing(TWEEN.Easing.Cubic.InOut)
-                .onComplete(() => { isRotating = false; setButtonsDisabled(false); });
-            rotateUp.chain(phaseShift);
-            phaseShift.chain(rotateDown);
-            rotateUp.start();
-        }
+        function sendZ1(){new TWEEN.Tween(waveGroup.rotation).to({x : Math.PI}).easing(TWEEN.Easing.Cubic.InOut).start();}; // |1> is theta = PI
+        function sendX0(){new TWEEN.Tween(waveGroup.rotation).to({x : Math.PI/2}).easing(TWEEN.Easing.Cubic.InOut).start();}; // |+> is theta = PI/2
+        function sendX1(){new TWEEN.Tween(waveGroup.rotation).to({x : -Math.PI/2}).easing(TWEEN.Easing.Cubic.InOut).start();}; // |-> is theta = -PI/2
+        function getCamera() { console.log("Camera:", camera); console.log("Controls:", controls); }
+        function triggerRotationAnimation() { if (isTranslating || isRotating) return; isRotating = true; setButtonsDisabled(true); const phaseShift = new TWEEN.Tween(waveParams).to({ phaseZ: 2 * Math.PI }, 5000).easing(TWEEN.Easing.Linear).onStart(() => { phaseValueElement.style.fontSize = '24px'; phaseValueElement.style.color = '#ffff00'; }).onComplete(() => { phaseValueElement.style.fontSize = '16px'; phaseValueElement.style.color = '#00ff88'; waveParams.phaseZ = 0; isRotating = false; setButtonsDisabled(false); }).start(); }
 
         // 3. INITIALIZATION
         function init() {
-            waveGroup = createWaveSystem();
-            scene.add(waveGroup);
-            createHud();
-
-            // --- MODIFIED: Added event listener for new toggle button ---
-            toggleControlsButton.addEventListener('click', () => {
-                animationControlsPanel.classList.toggle('is-open');
-            });
-
-            translateButton.addEventListener('click', triggerTranslateAnimation);
-            rotateButton.addEventListener('click', triggerRotationAnimation);
-            toggleHelixButton.addEventListener('click', toggleHelixVisibility);
-            toggleProjectionsVisibilityButton.addEventListener('click', toggleProjectionsVisibility);
-            startRecordingButton.addEventListener('click', startRecording);
-            stopRecordingButton.addEventListener('click', stopRecording);
-            
-            sendZ0Button.addEventListener('click', sendZ0);
-            sendZ1Button.addEventListener('click', sendZ1);
-            sendX0Button.addEventListener('click', sendX0);
-            sendX1Button.addEventListener('click', sendX1);
-
-            getCameraButton.addEventListener('click', getCamera);
-
+            waveGroup = createWaveSystem(); scene.add(waveGroup); createHud();
+            toggleControlsButton.addEventListener('click', () => animationControlsPanel.classList.toggle('is-open'));
+            toggleUIVisibilityButton.addEventListener('click', toggleUIVisibility);
+            toggleHudButton.addEventListener('click', toggleHudVisibility);
+            translateButton.addEventListener('click', triggerTranslateAnimation); rotateButton.addEventListener('click', triggerRotationAnimation); toggleHelixButton.addEventListener('click', toggleHelixVisibility); toggleProjectionsVisibilityButton.addEventListener('click', toggleProjectionsVisibility); startRecordingButton.addEventListener('click', startRecording); stopRecordingButton.addEventListener('click', stopRecording); sendZ0Button.addEventListener('click', sendZ0); sendZ1Button.addEventListener('click', sendZ1); sendX0Button.addEventListener('click', sendX0); sendX1Button.addEventListener('click', sendX1); getCameraButton.addEventListener('click', getCamera);
             animate();
         }
 
         // 4. MAIN LOOP
         function animate() {
             requestAnimationFrame(animate);
-            
             const { clientWidth, clientHeight } = canvasContainer; const canvas = renderer.domElement; const needResize = canvas.width !== clientWidth || canvas.height !== clientHeight; 
             if (needResize) { 
                 renderer.setSize(clientWidth, clientHeight, false); 
-                camera.aspect = clientWidth / clientHeight; 
-                camera.updateProjectionMatrix(); 
-                hudCamera.left = -clientWidth / 2;
-                hudCamera.right = clientWidth / 2;
-                hudCamera.top = clientHeight / 2;
-                hudCamera.bottom = -clientHeight / 2;
-                hudCamera.updateProjectionMatrix();
+                camera.aspect = clientWidth / clientHeight; camera.updateProjectionMatrix(); 
+                hudCamera.left = -clientWidth / 2; hudCamera.right = clientWidth / 2; hudCamera.top = clientHeight / 2; hudCamera.bottom = -clientHeight / 2; hudCamera.updateProjectionMatrix();
+                // Check if mobile layout is active and add class to container
+                controlsContainer.classList.toggle('is-vertical', clientWidth > 768);
             }
             
-            // --- MODIFIED: Responsive HUD Positioning ---
-            const isMobile = clientWidth <= 768;
-            const scale = isMobile ? 0.65 : 1.0;
-            const margin = isMobile ? 15 : 60;
-
+            // --- MODIFIED: Fully Dynamic & Adaptive HUD Sizing ---
+            const minDimension = Math.min(clientWidth, clientHeight);
+            const baseDimension = 900; // A reference dimension (e.g., a standard monitor height)
+            let scale = minDimension / baseDimension;
+            scale = THREE.MathUtils.clamp(scale, 0.35, 1.1); // Clamp scale to avoid being too small or large
+            
             hudSphereGroup.scale.set(scale, scale, scale);
-            const scaledRadius = hudSphereRadius * scale;
+            const scaledRadius = baseHudRadius * scale;
+            const margin = scaledRadius * 0.2 + 20; // Proportional margin with a fixed minimum
+            
+            const isMobileLayout = clientWidth <= 768;
             let hudX, hudY;
-
-            if (isMobile) {
-                // Top-right on mobile, to avoid controls at the bottom
+            if (isMobileLayout) { // Top-right on mobile
                 hudX = clientWidth / 2 - scaledRadius - margin;
                 hudY = clientHeight / 2 - scaledRadius - margin;
-            } else {
-                // Bottom-right on desktop
+            } else { // Bottom-right on desktop
                 hudX = clientWidth / 2 - scaledRadius - margin;
-                hudY = -clientHeight / 2 + scaledRadius - margin;
+                hudY = -clientHeight / 2 + scaledRadius + margin;
             }
             hudSphereGroup.position.set(hudX, hudY, 0);
 
             const elapsedTime = clock.getElapsedTime();
-            TWEEN.update();
-            controls.update();
-
+            TWEEN.update(); controls.update();
             phaseValueElement.textContent = `phaseZ: ${waveParams.phaseZ.toFixed(3)}`;
-
-            const sineWave = waveGroup.getObjectByName('mainWave'); const projectionXY = waveGroup.getObjectByName('projectionXY'); const projectionXZ = waveGroup.getObjectByName('projectionXZ'); const params = sineWave.geometry.userData.params;
-            for (let i = 0; i < params.points; i++) { const i3 = i * 3; const x = (i * (params.length / params.points)) - params.length / 2; const y = params.amplitudeY * Math.sin(x * params.frequencyY + elapsedTime); const z = params.amplitudeZ * Math.sin(x * params.frequencyZ + params.phaseZ + elapsedTime); const mainPositions = sineWave.geometry.attributes.position.array; mainPositions[i3] = x; mainPositions[i3 + 1] = y; mainPositions[i3 + 2] = z; const xyPositions = projectionXY.geometry.attributes.position.array; xyPositions[i3] = x; xyPositions[i3 + 1] = y; xyPositions[i3 + 2] = 0; const xzPositions = projectionXZ.geometry.attributes.position.array; xzPositions[i3] = x; xzPositions[i3 + 1] = 0; xzPositions[i3 + 2] = z; }
-            sineWave.geometry.attributes.position.needsUpdate = true; projectionXY.geometry.attributes.position.needsUpdate = true; projectionXZ.geometry.attributes.position.needsUpdate = true;
+            const mainWave = waveGroup.getObjectByName('mainWave'); const projXY = waveGroup.getObjectByName('projectionXY'); const projXZ = waveGroup.getObjectByName('projectionXZ'); const params = mainWave.geometry.userData.params;
+            for (let i = 0; i < params.points; i++) { const i3 = i * 3; const x = (i * (params.length / params.points)) - params.length / 2; const y = params.amplitudeY * Math.sin(x * params.frequencyY + elapsedTime); const z = params.amplitudeZ * Math.sin(x * params.frequencyZ + params.phaseZ + elapsedTime); const mainPos = mainWave.geometry.attributes.position.array; mainPos[i3] = x; mainPos[i3 + 1] = y; mainPos[i3 + 2] = z; const xyPos = projXY.geometry.attributes.position.array; xyPos[i3] = x; xyPos[i3 + 1] = y; xyPos[i3 + 2] = 0; const xzPos = projXZ.geometry.attributes.position.array; xzPos[i3] = x; xzPos[i3 + 1] = 0; xzPos[i3 + 2] = z; }
+            mainWave.geometry.attributes.position.needsUpdate = true; projXY.geometry.attributes.position.needsUpdate = true; projXZ.geometry.attributes.position.needsUpdate = true;
             
-            const polarAngle = waveGroup.rotation.x*2;
+            // Use Math.PI - waveGroup.rotation.x because Bloch sphere polar angle is from +Z, while our rotation is around X-axis.
+            const polarAngle = Math.PI/2 - waveGroup.rotation.x;
             const azimuthalAngle = waveParams.phaseZ;
-            const endpoint = new THREE.Vector3();
-            endpoint.setFromSphericalCoords(hudSphereRadius, polarAngle, azimuthalAngle);
+            const endpoint = new THREE.Vector3().setFromSphericalCoords(baseHudRadius, polarAngle, azimuthalAngle);
             
             vectorPoint.position.copy(endpoint);
             const linePositions = vectorLine.geometry.attributes.position.array;
-            linePositions[3] = endpoint.x;
-            linePositions[4] = endpoint.y;
-            linePositions[5] = endpoint.z;
+            linePositions[3] = endpoint.x; linePositions[4] = endpoint.y; linePositions[5] = endpoint.z;
             vectorLine.geometry.attributes.position.needsUpdate = true;
 
             // RENDER
             renderer.clear();
             renderer.render(scene, camera);
-            renderer.clearDepth();
-            renderer.render(hudScene, hudCamera);
+            
+            if (isHudVisible) {
+                renderer.clearDepth();
+                renderer.render(hudScene, hudCamera);
+            }
         }
 
         init();

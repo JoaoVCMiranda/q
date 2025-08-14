@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-import bb84 
+import bb84
 
 def distribution_bb84():
     # System consistency verification
@@ -67,10 +67,10 @@ def distribution_bb84():
     ax.grid(True) # Add a grid for better readability
     plt.tight_layout()
     plt.savefig('fig/grafico.png')
-    
+    return df
 if __name__ == '__main__':
     distribution_bb84()
-                    
+
 
 
 
