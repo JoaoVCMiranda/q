@@ -8,7 +8,7 @@ def distribution_bb84():
 
     # Scenary table distance x loss_rate
     iter = 5
-    n_qubits = [1,8,16, 32]
+    n_qubits = [1,8,32]
     # |      | 0% | 5% | 10% | 20% |
     # |------|----|----|-----|-----|
     # | 1    | 1a | 1b | 1c  | 1d  |
@@ -17,14 +17,15 @@ def distribution_bb84():
     # | 32   | 4a | 4b | 4c  | 4d  |
 
     # Input lossrate
-    lossrate = [0,.05, .1, .2]
+    lossrate = [0,.1,.2, .5, 1, 2, 5]
+    attenuation = [1-10**(-l/10) for l in lossrate]
     distance = [x for x in range(1,101)]
     #distance = [.001,0.005, .01,0.05, 0.1,0.5, 1,5, 10,50, 100]
 
     df = pd.DataFrame(columns=['iter', 'n_qubits', 'input_lossrate', 'distance', 'output_lossrate'])
 
 
-    for l in lossrate:
+    for l in attenuation:
         measured_lossrate = []
         for q in n_qubits:
             for d in distance:
@@ -49,11 +50,12 @@ def distribution_bb84():
     # Iterate through the combinations and plot on the same axes
     for i, l in enumerate(lossrate):
         for j, q in enumerate(n_qubits):
-            x = df.loc[(df['input_lossrate'] == l) & (df['n_qubits'] == q), 'distance']
-            y = df.loc[(df['input_lossrate'] == l) & (df['n_qubits'] == q), 'output_lossrate']
+            x = df.loc[(df['input_lossrate'] == attenuation[i]) & (df['n_qubits'] == q), 'distance']
+            y = df.loc[(df['input_lossrate'] == attenuation[i]) & (df['n_qubits'] == q), 'output_lossrate']
             if not x.empty:
                 highlight_marker = 'o' if all(y == 0) else None
-                ax.plot(x, y, label=f'l = {l}, q = {q}', color=colors[color_index],
+                label = f'a = {l}dB, q = {q}' if all(y == 0) else f'a = -{l}dB, q = {q}'
+                ax.plot(x, y, label=label, color=colors[color_index],
                         marker=highlight_marker, markersize=8)
                 if not all(y == 0):
                     color_index += 1
@@ -61,7 +63,7 @@ def distribution_bb84():
     # Set labels and title for the single plot
     ax.set_xlabel('Distance[km]')
     ax.set_ylabel('Output Lossrate')
-    ax.set_title('Output Lossrate vs. Distance for Different Input Lossrates per km and Number of Qubits')
+    ax.set_title('Output Lossrate vs. Distance for Different Attenuations dB per km and # of Qubits')
     ax.set_ylim((0, 1))
     ax.legend() # Show the legend to identify the different lines
     ax.grid(True) # Add a grid for better readability
